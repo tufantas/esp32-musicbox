@@ -1,0 +1,102 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f0f0f0;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    background-color: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+}
+
+.player-controls {
+    text-align: center;
+    margin: 20px 0;
+}
+
+button {
+    padding: 10px 20px;
+    margin: 0 5px;
+    border: none;
+    border-radius: 5px;
+    background-color: #4CAF50;
+    color: white;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+.volume-control {
+    margin: 20px 0;
+    text-align: center;
+}
+
+input[type="range"] {
+    width: 200px;
+}
+
+.now-playing {
+    text-align: center;
+    margin: 20px 0;
+    padding: 10px;
+    background-color: #f8f8f8;
+    border-radius: 5px;
+}
+
+.playlist {
+    margin-top: 20px;
+    padding: 10px;
+    background: #f8f8f8;
+    border-radius: 5px;
+}
+
+.playlist h2 {
+    margin: 0 0 10px 0;
+    color: #333;
+}
+
+.playlist ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.playlist li {
+    padding: 8px 12px;
+    margin: 4px 0;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.playlist li:hover {
+    background: #e8e8e8;
+}
+
+.file-upload {
+    margin: 20px 0;
+}
+
+.timer-settings {
+    margin: 20px 0;
+}
+
+.system-status {
+    margin: 20px 0;
+    padding: 10px;
+    background-color: #f8f8f8;
+    border-radius: 5px;
+} 
