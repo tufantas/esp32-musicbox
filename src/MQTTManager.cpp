@@ -117,14 +117,17 @@ void MQTTManager::handleVolume(const String& volume) {
 }
 
 void MQTTManager::handleTimer(const JsonDocument& doc) {
-    if (doc.containsKey("hour") && doc.containsKey("minute") && doc.containsKey("action")) {
-        uint8_t hour = doc["hour"];
-        uint8_t minute = doc["minute"];
-        String action = doc["action"].as<String>();
-        
-        bool isPlayTimer = (action == "play");
-        timeManager.addTimer(hour, minute, isPlayTimer);
-    }
+    uint8_t hour = doc["hour"];
+    uint8_t minute = doc["minute"];
+    String action = doc["action"] | "play";  // varsayılan olarak play
+    
+    // ISO formatında tarih-saat oluştur
+    char dateTimeStr[20];
+    DateTime now = timeManager.getDateTime();
+    sprintf(dateTimeStr, "%04d-%02d-%02dT%02d:%02d",
+        now.year(), now.month(), now.day(), hour, minute);
+    
+    timeManager.addTimer(String(dateTimeStr), action);
 }
 
 void MQTTManager::sendStatus(bool force) {

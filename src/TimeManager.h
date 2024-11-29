@@ -3,58 +3,83 @@
 
 #include <Arduino.h>
 #include <RTClib.h>
+#include <WiFi.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
 #include <vector>
-#include <SD.h>  // SD kart için
-#include <FS.h>  // File sistemi için
-#include "config.h"
 
 struct Timer {
-    uint8_t hour;
-    uint8_t minute;
+    DateTime dateTime;
+    String action;
     bool enabled;
-    bool isPlayTimer;  // true = play timer, false = stop timer
+    String id;
 };
 
 class TimeManager {
 private:
     RTC_DS3231& rtc;
+    WiFiUDP ntpUDP;
+    NTPClient timeClient;
     std::vector<Timer> timers;
-    bool rtcPresent;
-    
-    // Son kontrol zamanı
-    uint32_t lastCheck;
-    
-    // Timer kontrolü
+    int utcOffset;  // Saat dilimi farkı
+
+    // Timer yönetimi için yardımcı fonksiyonlar
+    String generateTimerId();
     void checkTimers();
-    bool isTimeMatch(const Timer& timer, const DateTime& now);
 
 public:
     TimeManager(RTC_DS3231& _rtc) : 
-        rtc(_rtc), 
-        rtcPresent(false),
-        lastCheck(0) {}
+        rtc(_rtc),
+        timeClient(ntpUDP, "pool.ntp.org", 0, 60000),  // updateInterval'i 60 saniye yap
+        utcOffset(3) {  // Türkiye için UTC+3
+        timeClient.setUpdateInterval(60000);  // 60 saniye
+    }
     
-    // Temel işlevler
     bool begin();
     void loop();
     
-    // RTC işlemleri
+    // Temel saat fonksiyonları
+    DateTime getDateTime() const;
     bool setDateTime(const DateTime& dt);
-    DateTime getDateTime();
-    float getTemperature();
-    bool isRTCPresent() const { return rtcPresent; }
+    float getTemperature() const;
     
-    // Timer işlemleri
-    bool addTimer(uint8_t hour, uint8_t minute, bool isPlayTimer);
-    bool removeTimer(uint8_t hour, uint8_t minute);
-    void clearTimers();
-    std::vector<Timer> getTimers() const { return timers; }
-    bool saveTimers(const char* filename);
-    bool loadTimers(const char* filename);
+    // NTP senkronizasyonu
+    bool syncFromNTP();
+    bool setDateTime(const String& dateTimeStr);  // ISO format: "YYYY-MM-DDTHH:MM"
     
-    // Timer durumu
-    bool isTimerActive(uint8_t hour, uint8_t minute);
-    void enableTimer(uint8_t hour, uint8_t minute, bool enable);
+    // Timer yönetimi
+    bool addTimer(const String& dateTimeStr, const String& action);
+    bool removeTimer(const String& timerId);
+    const std::vector<Timer>& getTimers() const { return timers; }
+    void enableTimer(const String& timerId, bool enable);
+    
+    void setTimezone(int tz) {
+        utcOffset = tz;
+    }
+    
+    void adjustTimeWithTimezone(int& hour) {
+        hour = (hour + utcOffset) % 24;
+    }
+    
+    void setUtcOffset(int offset) {
+        Serial.printf("Setting UTC offset to: %d\n", offset);
+        utcOffset = offset;
+        timeClient.end();  // NTP istemcisini yeniden başlat
+        timeClient.begin();
+        timeClient.setTimeOffset(offset * 3600);  // Saati saniyeye çevir
+        
+        // Mevcut RTC zamanını yeni offset'e göre ayarla
+        DateTime now = rtc.now();
+        int newHour = (now.hour() + offset) % 24;
+        DateTime adjusted(now.year(), now.month(), now.day(), 
+                         newHour, now.minute(), now.second());
+        rtc.adjust(adjusted);
+    }
+    
+    int getUtcOffset() const { return utcOffset; }
+    
+    // Sadece fonksiyon bildirimi
+    bool getNTPTime(int& hour, int& minute, int& second);
 };
 
 #endif // TIME_MANAGER_H 

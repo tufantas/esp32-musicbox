@@ -9,11 +9,11 @@
 #define I2C_SDA 21
 #define I2C_SCL 22
 
-// SD Card
-#define SD_CS    5
-#define SD_MOSI  23
-#define SD_MISO  19
-#define SD_SCK   18
+// SD Card - SPI Pins
+#define SD_CS    5    // GPIO5
+#define SD_MOSI  23   // GPIO23
+#define SD_MISO  19   // GPIO19
+#define SD_SCK   18   // GPIO18
 
 // Status LED
 #define LED_R 25

@@ -19,7 +19,7 @@ void printDirectory(File dir, int numTabs);  // Fonksiyon prototipi
 // Global nesneler
 RTC_DS3231 rtc;
 Adafruit_MCP4725 dac;
-AsyncWebServer server(WEB_SERVER_PORT);
+AsyncWebServer server(80);
 
 // Yönetici sınıfları
 AudioManager audioManager(dac);
@@ -27,8 +27,8 @@ FileManager fileManager;
 TimeManager timeManager(rtc);
 MQTTManager mqttManager(audioManager, timeManager);
 WifiManager wifiManager(server);
-WebServer webServer(server, audioManager, fileManager, timeManager, mqttManager);
 BluetoothManager bleManager(audioManager, timeManager);
+WebServer webServer(server, audioManager, fileManager, timeManager, mqttManager, bleManager);
 
 // Sistem durumu
 SystemStatus systemStatus = {
@@ -237,10 +237,11 @@ void setup() {
     // BluetoothManager başlatmasını kaldır veya koşullu hale getir
     #ifdef ENABLE_BLUETOOTH
         if (!bleManager.begin()) {
-            Serial.println("⚠️ Failed to initialize BLE Manager");
-        } else {
-            Serial.println("✅ BLE Manager initialized");
+            Serial.println("❌ Failed to initialize Bluetooth!");
+            setStatusLED(255, 0, 0);
+            return;
         }
+        Serial.println("✅ Bluetooth initialized");
     #endif
     
     // Başarılı başlatma - Yeşil LED

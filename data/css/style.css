@@ -88,6 +88,51 @@ input[type="range"] {
 
 .file-upload {
     margin: 20px 0;
+    padding: 15px;
+    background: #f8f8f8;
+    border-radius: 5px;
+}
+
+.file-upload h2 {
+    margin: 0 0 15px 0;
+    color: #333;
+}
+
+.file-upload input[type="file"] {
+    margin-bottom: 10px;
+    padding: 10px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.upload-btn {
+    background-color: #28a745;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.upload-btn:hover {
+    background-color: #218838;
+}
+
+.progress-bar {
+    margin: 10px 0;
+    padding: 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+}
+
+.progress-bar.complete {
+    background: #d4edda;
+    color: #155724;
+}
+
+.progress-bar.failed {
+    background: #f8d7da;
+    color: #721c24;
 }
 
 .timer-settings {
@@ -99,4 +144,126 @@ input[type="range"] {
     padding: 10px;
     background-color: #f8f8f8;
     border-radius: 5px;
+}
+
+.system-controls {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f8f8;
+    border-radius: 5px;
+}
+
+.system-controls h2 {
+    margin: 0 0 15px 0;
+    color: #333;
+}
+
+.danger-btn {
+    background-color: #dc3545;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    margin: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.danger-btn:hover {
+    background-color: #c82333;
+}
+
+.danger-btn i {
+    margin-right: 8px;
+}
+
+.time-settings {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f8f8;
+    border-radius: 5px;
+}
+
+.time-settings h2, .time-settings h3 {
+    margin: 0 0 15px 0;
+    color: #333;
+}
+
+.current-time {
+    margin-bottom: 20px;
+}
+
+.sync-btn {
+    background-color: #007bff;
+    color: white;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.sync-btn:hover {
+    background-color: #0056b3;
+}
+
+.manual-time, .timer-settings {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #ddd;
+}
+
+.timer-item {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.timer-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    background: white;
+    border-radius: 4px;
+    margin: 5px 0;
+}
+
+.timer-list-item button {
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+}
+
+.current-time-container {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.current-time {
+    font-size: 2em;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 5px;
+}
+
+.current-date {
+    font-size: 1.2em;
+    color: #666;
+}
+
+.timezone-select {
+    margin: 10px 0;
+}
+
+.timezone-select select {
+    padding: 5px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
 } 

@@ -11,6 +11,8 @@
 #include "FileManager.h"
 #include "TimeManager.h"
 #include "MQTTManager.h"
+#include "BluetoothManager.h"
+#include <nvs_flash.h>
 
 class WebServer {
 private:
@@ -20,6 +22,7 @@ private:
     FileManager& fileManager;
     TimeManager& timeManager;
     MQTTManager& mqttManager;
+    BluetoothManager& bleManager;
     
     void setupRoutes();
     void handleFileUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final);
@@ -31,13 +34,14 @@ private:
     static String formatBytes(size_t bytes);
 
 public:
-    WebServer(AsyncWebServer& webServer, AudioManager& audio, FileManager& file, TimeManager& time, MQTTManager& mqtt) : 
+    WebServer(AsyncWebServer& webServer, AudioManager& audio, FileManager& file, TimeManager& time, MQTTManager& mqtt, BluetoothManager& ble) : 
         server(webServer),
         ws("/ws"),
         audioManager(audio),
         fileManager(file),
         timeManager(time),
-        mqttManager(mqtt) {}
+        mqttManager(mqtt),
+        bleManager(ble) {}
     
     bool begin();
     void loop();

@@ -95,15 +95,25 @@ void WebServer::setupRoutes() {
         AsyncResponseStream *response = request->beginResponseStream("application/json");
         DynamicJsonDocument doc(512);
         
-        doc["wifi"] = WiFi.isConnected() ? "Connected" : "Disconnected";
-        doc["mqtt"] = mqttManager.isConnectedToMqtt() ? "Connected" : "Disconnected";
-        doc["volume"] = audioManager.getVolume();
-        doc["track"] = audioManager.getCurrentTrack();
-        
+        // RTC zamanı
         DateTime now = timeManager.getDateTime();
         doc["time"]["hour"] = now.hour();
         doc["time"]["minute"] = now.minute();
         doc["time"]["second"] = now.second();
+        doc["date"]["year"] = now.year();
+        doc["date"]["month"] = now.month();
+        doc["date"]["day"] = now.day();
+        
+        // NTP zamanı
+        int ntpHour, ntpMinute, ntpSecond;
+        if (timeManager.getNTPTime(ntpHour, ntpMinute, ntpSecond)) {
+            doc["ntp"]["hour"] = ntpHour;
+            doc["ntp"]["minute"] = ntpMinute;
+            doc["ntp"]["second"] = ntpSecond;
+            doc["ntp"]["offset"] = timeManager.getUtcOffset();
+        }
+        
+        doc["timezone"] = timeManager.getUtcOffset();
         doc["temperature"] = timeManager.getTemperature();
         
         serializeJson(doc, *response);
@@ -150,13 +160,19 @@ void WebServer::setupRoutes() {
         auto timers = timeManager.getTimers();
         for (const auto& timer : timers) {
             JsonObject timerObj = array.createNestedObject();
-            timerObj["hour"] = timer.hour;
-            timerObj["minute"] = timer.minute;
+            timerObj["id"] = timer.id;
+            timerObj["datetime"] = String(timer.dateTime.year()) + "-" +
+                                 String(timer.dateTime.month()) + "-" +
+                                 String(timer.dateTime.day()) + "T" +
+                                 String(timer.dateTime.hour()) + ":" +
+                                 String(timer.dateTime.minute());
+            timerObj["action"] = timer.action;
             timerObj["enabled"] = timer.enabled;
-            timerObj["isPlayTimer"] = timer.isPlayTimer;
         }
         
-        serializeJson(doc, *response);
+        String output;
+        serializeJson(doc, output);
+        response->print(output);
         request->send(response);
     });
     
@@ -263,6 +279,82 @@ void WebServer::setupRoutes() {
         } else {
             Serial.println("Missing volume parameter");
             request->send(400, "text/plain", "Missing volume parameter");
+        }
+    });
+    
+    // WiFi ayarlarını sıfırla
+    server.on("/api/reset-wifi", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        Serial.println("Resetting WiFi settings...");
+        request->send(200, "text/plain", "Resetting WiFi settings");
+        delay(500);
+        WiFi.disconnect(true);  // true parametresi ayarları siler
+        ESP.restart();
+    });
+    
+    // Tüm NVS verilerini sil
+    server.on("/api/clear-nvs", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        Serial.println("Clearing all NVS data...");
+        nvs_flash_erase();  // Tüm NVS'yi sil
+        nvs_flash_init();   // NVS'yi yeniden başlat
+        request->send(200, "text/plain", "All data cleared");
+        delay(500);
+        ESP.restart();
+    });
+    
+    // NTP senkronizasyonu
+    server.on("/api/sync-time", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        bool success = timeManager.syncFromNTP();
+        AsyncResponseStream *response = request->beginResponseStream("application/json");
+        DynamicJsonDocument doc(128);
+        doc["success"] = success;
+        serializeJson(doc, *response);
+        request->send(response);
+    });
+    
+    // Manuel saat ayarı
+    server.on("/api/set-time", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (request->hasParam("datetime", true)) {
+            String dateTime = request->getParam("datetime", true)->value();
+            timeManager.setDateTime(dateTime);
+            request->send(200);
+        } else {
+            request->send(400);
+        }
+    });
+    
+    // Timer ekleme
+    server.on("/api/add-timer", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (request->hasParam("datetime", true) && request->hasParam("action", true)) {
+            String dateTime = request->getParam("datetime", true)->value();
+            String action = request->getParam("action", true)->value();
+            timeManager.addTimer(dateTime, action);
+            request->send(200);
+        } else {
+            request->send(400);
+        }
+    });
+    
+    server.on("/api/remove-timer", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (request->hasParam("id", true)) {
+            String timerId = request->getParam("id", true)->value();
+            if (timeManager.removeTimer(timerId)) {
+                request->send(200);
+            } else {
+                request->send(404, "text/plain", "Timer not found");
+            }
+        } else {
+            request->send(400, "text/plain", "Missing timer id");
+        }
+    });
+    
+    // Timezone ayarı
+    server.on("/api/set-timezone", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (request->hasParam("offset", true)) {
+            int offset = request->getParam("offset", true)->value().toInt();
+            timeManager.setUtcOffset(offset);
+            request->send(200);
+        } else {
+            request->send(400);
         }
     });
 }

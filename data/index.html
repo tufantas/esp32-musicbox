@@ -9,6 +9,14 @@
 </head>
 <body>
     <div class='container'>
+        <div class="current-time-container">
+            <div class="current-time">
+                <span id="currentTime">--:--:--</span>
+            </div>
+            <div class="current-date">
+                <span id="currentDate">--.--.----</span>
+            </div>
+        </div>
         <h1>ESP32 Music Box</h1>
         
         <div class='player-controls'>
@@ -28,6 +36,18 @@
             <p>Now Playing: <span id='currentTrack'>-</span></p>
             <p>Temperature: <span id='temperature'>-</span>°C</p>
             <p>WiFi: <span id='wifiStatus'>-</span></p>
+            <p>Bluetooth: <span id='bluetoothStatus'>-</span></p>
+        </div>
+
+        <div class='file-upload'>
+            <h2>Upload Music</h2>
+            <form id='uploadForm' enctype='multipart/form-data'>
+                <input type='file' id='fileInput' accept='.mp3' multiple>
+                <button type='button' onclick='uploadFiles()' class='upload-btn'>
+                    <i class='fas fa-upload'></i> Upload Files
+                </button>
+            </form>
+            <div id='uploadProgress'></div>
         </div>
 
         <div class='playlist'>
@@ -35,6 +55,79 @@
             <ul id='musicList'>
                 <!-- JavaScript ile doldurulacak -->
             </ul>
+        </div>
+
+        <div class='system-controls'>
+            <h2>System Controls</h2>
+            <button onclick='resetWiFi()' class='danger-btn'>
+                <i class='fas fa-wifi'></i> Reset WiFi Settings
+            </button>
+            <button onclick='clearNVS()' class='danger-btn'>
+                <i class='fas fa-trash'></i> Clear All Data
+            </button>
+        </div>
+
+        <div class='time-settings'>
+            <h2>Time Settings</h2>
+            <div class='current-time'>
+                <p>RTC Time: <span id='currentTime'>-</span></p>
+                <p>RTC Date: <span id='currentDate'>-</span></p>
+                <p>NTP Time: <span id='ntpTime'>-</span></p>
+                <div class="timezone-select">
+                    <label for="utcOffset">Timezone:</label>
+                    <select id="utcOffset" onchange="setTimezone()">
+                        <option value="-12">UTC-12:00</option>
+                        <option value="-11">UTC-11:00</option>
+                        <option value="-10">UTC-10:00</option>
+                        <option value="-9">UTC-09:00</option>
+                        <option value="-8">UTC-08:00</option>
+                        <option value="-7">UTC-07:00</option>
+                        <option value="-6">UTC-06:00</option>
+                        <option value="-5">UTC-05:00</option>
+                        <option value="-4">UTC-04:00</option>
+                        <option value="-3">UTC-03:00</option>
+                        <option value="-2">UTC-02:00</option>
+                        <option value="-1">UTC-01:00</option>
+                        <option value="0">UTC±00:00</option>
+                        <option value="1">UTC+01:00</option>
+                        <option value="2">UTC+02:00</option>
+                        <option value="3" selected>UTC+03:00 (Turkey)</option>
+                        <option value="4">UTC+04:00</option>
+                        <option value="5">UTC+05:00</option>
+                        <option value="6">UTC+06:00</option>
+                        <option value="7">UTC+07:00</option>
+                        <option value="8">UTC+08:00</option>
+                        <option value="9">UTC+09:00</option>
+                        <option value="10">UTC+10:00</option>
+                        <option value="11">UTC+11:00</option>
+                        <option value="12">UTC+12:00</option>
+                    </select>
+                </div>
+                <button onclick='syncNTP()' class='sync-btn'>
+                    <i class='fas fa-sync'></i> Sync from Internet
+                </button>
+            </div>
+            
+            <div class='manual-time'>
+                <h3>Manual Time Set</h3>
+                <input type='datetime-local' id='manualDateTime'>
+                <button onclick='setManualTime()'>Set Time</button>
+            </div>
+            
+            <div class='timer-settings'>
+                <h3>Timer Settings</h3>
+                <div class='timer-item'>
+                    <input type='datetime-local' id='timerDateTime'>
+                    <select id='timerAction'>
+                        <option value='play'>Play</option>
+                        <option value='stop'>Stop</option>
+                    </select>
+                    <button onclick='addTimer()'>Add Timer</button>
+                </div>
+                <div id='timerList'>
+                    <!-- Timer listesi JavaScript ile doldurulacak -->
+                </div>
+            </div>
         </div>
     </div>
     <script src='js/app.js'></script>
