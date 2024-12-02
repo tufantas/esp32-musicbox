@@ -7,7 +7,7 @@
 // Pin Definitions
 // I2C
 #define I2C_SDA 21
-#define I2C_SCL 22
+#define I2C_SCL 16
 
 // SD Card
 #define SD_CS    5
@@ -16,12 +16,11 @@
 #define SD_SCK   18
 
 // Status LED
-#define LED_R 25
-#define LED_G 26
+#define LED_R 32
+#define LED_G 33
 #define LED_B 27
 
 // I2C Addresses
-#define MCP4725_ADDR 0x60
 #define RTC_ADDR     0x68
 
 // MQTT Settings
@@ -53,7 +52,7 @@
 #define FADE_DELAY 50
 
 // System Settings
-#define WDT_TIMEOUT 30000  // 30 seconds
+#define WDT_TIMEOUT 60000  // 60 saniye
 #define MAX_RECONNECT_ATTEMPTS 3      // 3 deneme
 #define RECONNECT_DELAY 10000         // 10 saniye
 
@@ -74,7 +73,6 @@ enum ErrorCode {
     ERR_SD_INIT = 1,
     ERR_WIFI_CONNECT = 2,
     ERR_MQTT_CONNECT = 3,
-    ERR_DAC_INIT = 4,
     ERR_RTC_INIT = 5,
     ERR_FILE_OPEN = 6,
     ERR_FILE_READ = 7,
@@ -99,5 +97,14 @@ struct SystemStatus {
 #define STATUS_VOLUME "Volume: %d%%"
 #define STATUS_PLAYING "Playing: %s"
 #define STATUS_STOPPED "Stopped"
+
+// PCM5102 Pin Definitions
+#define I2S_BCLK 26 // BCK pin
+#define I2S_LRCK 25 // LCK pin
+#define I2S_DOUT 22 // DIN pin
+
+// Audio Buffer Settings
+#define AUDIO_BUFFER_SIZE 8192
+#define AUDIO_TASK_PRIORITY 3
 
 #endif // CONFIG_H 

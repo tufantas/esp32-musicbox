@@ -3,28 +3,30 @@
 QueueHandle_t AudioManager::audioQueue = NULL;
 
 bool AudioManager::begin() {
-    // Basit DAC kontrolü
-    if (!dac.begin(MCP4725_ADDR)) {
-        Serial.println("❌ MCP4725 DAC initialization failed!");
-        return false;
-    }
+    // I2S çıkışını başlat
+    out = new AudioOutputI2S(AUDIO_BUFFER_SIZE); // Buffer size'ı constructor'da belirt
+    out->SetPinout(I2S_BCLK, I2S_LRCK, I2S_DOUT);
     
-    // Başlangıç ses seviyesini ayarla
-    dac.setVoltage(0, false);  // Başlangıçta sessiz
-    setVolume(currentVolume);
+    // I2S konfigürasyonunu ayarla
+    out->SetBitsPerSample(16);
+    out->SetChannels(2);
+    out->SetRate(44100);
+    out->SetGain(((float)currentVolume) / 100.0);
     
-    // Audio task'ı başlat
+    // Stereo mod
+    out->SetOutputModeMono(false);
+    
+    // Audio task'ı daha yüksek öncelikle başlat
     xTaskCreatePinnedToCore(
         audioTask,
         "AudioTask",
-        8192,
+        8192,  // Stack size
         this,
-        1,
+        AUDIO_TASK_PRIORITY,     // Priority'yi config'den al
         &audioTaskHandle,
-        1
+        1      // Tekrar Core 1'e alalım
     );
     
-    Serial.println("✅ MCP4725 DAC initialized");
     return true;
 }
 
@@ -43,16 +45,37 @@ void AudioManager::audioTask(void* parameter) {
 void AudioManager::processAudio() {
     if (!currentTrack.length()) return;
     
-    stopPlaying();  // Önceki çalmayı durdur
+    stopPlaying();
     
-    // Yeni çalma işlemini başlat
+    // Debug bilgisi
+    Serial.printf(" Trying to play: %s\n", currentTrack.c_str());
+    
     file = new AudioFileSourceSD(currentTrack.c_str());
-    id3 = new AudioFileSourceID3(file);
-    out = new AudioOutputMCP4725(dac);
-    mp3 = new AudioGeneratorMP3();
+    if (!file) {
+        Serial.println("❌ Failed to open file!");
+        return;
+    }
     
-    // Volume'u yüksek tut
-    setVolume(100);  // Maksimum volume
+    id3 = new AudioFileSourceID3(file);
+    if (!id3) {
+        Serial.println("❌ Failed to create ID3 decoder!");
+        delete file;
+        return;
+    }
+    
+    out = new AudioOutputI2S(AUDIO_BUFFER_SIZE); // Buffer size'ı constructor'da belirt
+    out->SetPinout(I2S_BCLK, I2S_LRCK, I2S_DOUT);
+    out->SetGain(((float)currentVolume) / 100.0);
+    out->SetOutputModeMono(false);
+    
+    mp3 = new AudioGeneratorMP3();
+    if (!mp3) {
+        Serial.println("❌ Failed to create MP3 decoder!");
+        delete id3;
+        delete file;
+        delete out;
+        return;
+    }
     
     if (!mp3->begin(id3, out)) {
         Serial.println("❌ Failed to start MP3 playback");
@@ -62,17 +85,21 @@ void AudioManager::processAudio() {
     
     isPlaying = true;
     Serial.printf("▶️ Playing: %s\n", currentTrack.c_str());
-    Serial.println("Volume set to maximum for testing");
     
     while (mp3->isRunning() && isPlaying) {
         if (!mp3->loop()) {
             mp3->stop();
             break;
         }
-        vTaskDelay(1);
+        // Her 50 iterasyonda bir watchdog'u resetle
+        static int counter = 0;
+        if (++counter >= 50) {
+            vTaskDelay(1);
+            counter = 0;
+        } else {
+            taskYIELD();
+        }
     }
-    
-    stopPlaying();
 }
 
 void AudioManager::stopPlaying() {
@@ -124,11 +151,13 @@ void AudioManager::stop() {
 }
 
 void AudioManager::setVolume(int volume) {
-    volume = constrain(volume, 0, 100);
+    if (volume < 0) volume = 0;
+    if (volume > 100) volume = 100;
     currentVolume = volume;
-    uint16_t dacValue = volumeToDacValue(volume);
-    dac.setVoltage(dacValue, false);
-    Serial.printf("Volume set to: %d%%\n", volume);
+    
+    if (out) {
+        out->SetGain(((float)volume) / 100.0);
+    }
 }
 
 int AudioManager::getVolume() const {
