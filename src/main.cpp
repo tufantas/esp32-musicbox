@@ -90,7 +90,7 @@ void setup() {
     
     // Web Server'ı başlat
     Serial.println("\n=== Initializing Web Server ===");
-    if (!webServer.begin()) {
+    if (!webServer.begifn()) {
         Serial.println("❌ Failed to initialize Web Server!");
         setStatusLED(255, 0, 0);
         return;
