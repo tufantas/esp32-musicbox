@@ -25,8 +25,8 @@ FileManager fileManager;
 TimeManager timeManager(rtc);
 MQTTManager mqttManager(audioManager, timeManager);
 WifiManager wifiManager(server);
-WebServer webServer(server, audioManager, fileManager, timeManager, mqttManager);
 BluetoothManager bleManager(audioManager, timeManager);
+WebServer webServer(server, audioManager, fileManager, timeManager, mqttManager, bleManager);
 
 // Sistem durumu
 SystemStatus systemStatus = {
