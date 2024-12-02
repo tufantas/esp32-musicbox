@@ -2,7 +2,6 @@
 #define AUDIO_MANAGER_H
 
 #include <Arduino.h>
-#include <Adafruit_MCP4725.h>
 #include <SD.h>
 #include "config.h"
 #include <freertos/FreeRTOS.h>
@@ -12,11 +11,9 @@
 #include "AudioFileSourceID3.h"
 #include "AudioGeneratorMP3.h"
 #include "AudioOutputI2S.h"
-#include "AudioOutputMCP4725.h"
 
 class AudioManager {
 private:
-    Adafruit_MCP4725& dac;
     int currentVolume;
     bool isPlaying;
     String currentTrack;
@@ -27,7 +24,7 @@ private:
     AudioFileSourceSD *file;
     AudioFileSourceID3 *id3;
     AudioGeneratorMP3 *mp3;
-    AudioOutputMCP4725 *out;
+    AudioOutputI2S *out;
     
     // Audio task
     static void audioTask(void* parameter);
@@ -41,8 +38,7 @@ private:
     }
 
 public:
-    AudioManager(Adafruit_MCP4725& _dac) : 
-        dac(_dac), 
+    AudioManager() : 
         currentVolume(DEFAULT_VOLUME),
         isPlaying(false),
         currentTrack(""),

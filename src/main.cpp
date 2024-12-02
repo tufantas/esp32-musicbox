@@ -3,7 +3,6 @@
 #include <SPI.h>
 #include <SD.h>
 #include <RTClib.h>
-#include <Adafruit_MCP4725.h>
 #include "config.h"
 #include "AudioManager.h"
 #include "FileManager.h"
@@ -18,11 +17,10 @@ void printDirectory(File dir, int numTabs);  // Fonksiyon prototipi
 
 // Global nesneler
 RTC_DS3231 rtc;
-Adafruit_MCP4725 dac;
 AsyncWebServer server(WEB_SERVER_PORT);
 
 // Yönetici sınıfları
-AudioManager audioManager(dac);
+AudioManager audioManager;
 FileManager fileManager;
 TimeManager timeManager(rtc);
 MQTTManager mqttManager(audioManager, timeManager);
@@ -51,12 +49,6 @@ void setStatusLED(uint8_t r, uint8_t g, uint8_t b) {
 // I2C cihazlarını başlat
 bool initI2CDevices() {
     Wire.begin(I2C_SDA, I2C_SCL);
-    
-    // DAC başlatma
-    if (!dac.begin(MCP4725_ADDR)) {
-        systemStatus.lastError = ERR_DAC_INIT;
-        return false;
-    }
     
     // RTC başlatma
     if (!rtc.begin()) {
@@ -109,14 +101,6 @@ void setup() {
     Serial.println("\n=== Checking I2C Devices ===");
     Wire.begin(I2C_SDA, I2C_SCL);
     delay(100);
-    
-    // DAC kontrolü
-    if (!dac.begin(MCP4725_ADDR)) {
-        Serial.println("❌ MCP4725 DAC not found!");
-        setStatusLED(255, 0, 0);
-        return;
-    }
-    Serial.println("✅ MCP4725 DAC initialized");
     
     // RTC kontrolü
     if (!rtc.begin()) {
