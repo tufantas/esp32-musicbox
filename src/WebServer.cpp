@@ -8,7 +8,33 @@ bool WebServer::begin() {
         Serial.println("❌ SPIFFS Mount Failed");
         return false;
     }
-    Serial.println("✅ SPIFFS mounted");
+    
+    // SPIFFS içeriğini kontrol et
+    Serial.println("\nChecking SPIFFS files:");
+    File root = SPIFFS.open("/");
+    File file = root.openNextFile();
+    while(file) {
+        Serial.printf("Found file: %s, size: %d bytes\n", file.name(), file.size());
+        file = root.openNextFile();
+    }
+    
+    // Ana sayfa route'u
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (SPIFFS.exists("/index.html")) {
+            request->send(SPIFFS, "/index.html", "text/html");
+            Serial.println("Serving index.html");
+        } else {
+            Serial.println("❌ index.html not found!");
+            request->send(404, "text/plain", "index.html not found!");
+        }
+    });
+    
+    // Statik dosyalar için route'lar
+    server.serveStatic("/css/", SPIFFS, "/css/");
+    server.serveStatic("/js/", SPIFFS, "/js/");
+    
+    // API route'larını ayarla
+    setupRoutes();
     
     // WebSocket handler'ı ekle
     ws.onEvent([this](AsyncWebSocket *server, AsyncWebSocketClient *client, 
@@ -21,22 +47,6 @@ bool WebServer::begin() {
         }
     });
     server.addHandler(&ws);
-    
-    // Ana sayfa route'u
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if (SPIFFS.exists("/index.html")) {
-            request->send(SPIFFS, "/index.html", "text/html");
-        } else {
-            request->send(404, "text/plain", "index.html not found!");
-        }
-    });
-    
-    // Statik dosyalar için route'lar
-    server.serveStatic("/css/", SPIFFS, "/css/");
-    server.serveStatic("/js/", SPIFFS, "/js/");
-    
-    // API route'larını ayarla
-    setupRoutes();
     
     // Sunucuyu başlat
     server.begin();
@@ -95,23 +105,27 @@ void WebServer::setupRoutes() {
         AsyncResponseStream *response = request->beginResponseStream("application/json");
         DynamicJsonDocument doc(512);
         
+        // Temel durum bilgileri
         doc["wifi"] = WiFi.isConnected() ? "Connected" : "Disconnected";
         doc["mqtt"] = mqttManager.isConnectedToMqtt() ? "Connected" : "Disconnected";
         doc["volume"] = audioManager.getVolume();
         doc["track"] = audioManager.getCurrentTrack();
+        doc["playing"] = audioManager.isCurrentlyPlaying();
         
+        // Sıcaklık ve zaman bilgileri
+        doc["temperature"] = timeManager.getTemperature();
         DateTime now = timeManager.getDateTime();
         doc["time"]["hour"] = now.hour();
         doc["time"]["minute"] = now.minute();
-        doc["time"]["second"] = now.second();
-        doc["temperature"] = timeManager.getTemperature();
         
-        serializeJson(doc, *response);
+        String output;
+        serializeJson(doc, output);
+        response->print(output);
         request->send(response);
     });
     
     // Müzik dosyası yükleme
-    server.on("/api/upload", HTTP_POST, 
+    server.on("/upload", HTTP_POST, 
         [](AsyncWebServerRequest *request) {
             request->send(200);
         },
@@ -177,30 +191,11 @@ void WebServer::setupRoutes() {
         Serial.println("\n=== Play Request ===");
         
         // POST verilerini al
-        if (request->hasHeader("Content-Type") && request->getHeader("Content-Type")->value() == "application/json") {
-            if (request->hasParam("postData", true)) {
-                String json = request->getParam("postData", true)->value();
-                Serial.printf("Received JSON: %s\n", json.c_str());
-                
-                DynamicJsonDocument doc(1024);
-                DeserializationError error = deserializeJson(doc, json);
-                
-                if (!error && doc.containsKey("file")) {
-                    String file = doc["file"].as<String>();
-                    Serial.printf("Extracted file name: %s\n", file.c_str());
-                    Serial.printf("Full path: /%s\n", file.c_str());
-                    
-                    audioManager.play("/" + file);
-                    audioManager.printDebugInfo();
-                    request->send(200);
-                    return;
-                }
-            }
-        }
-        
-        // Raw body'den okuma dene
         if (request->_tempObject) {
-            String json = (char*)request->_tempObject;
+            String json = String((char*)request->_tempObject);  // String kopyası oluştur
+            free(request->_tempObject);  // Hemen belleği temizle
+            request->_tempObject = NULL;
+            
             Serial.printf("Raw body: %s\n", json.c_str());
             
             DynamicJsonDocument doc(1024);
@@ -208,18 +203,21 @@ void WebServer::setupRoutes() {
             
             if (!error && doc.containsKey("file")) {
                 String file = doc["file"].as<String>();
-                Serial.printf("Extracted file name: %s\n", file.c_str());
-                Serial.printf("Full path: /%s\n", file.c_str());
+                Serial.printf("Playing file: %s\n", file.c_str());
                 
-                audioManager.play("/" + file);
-                audioManager.printDebugInfo();
+                if (file.startsWith("/")) {
+                    file = file.substring(1);  // Baştaki / karakterini kaldır
+                }
+                
+                audioManager.play("/" + file);  // Başına / ekleyerek gönder
                 request->send(200);
                 return;
             }
         }
         
-        Serial.println("❌ No valid JSON data found");
+        Serial.println("❌ Invalid play request");
         request->send(400, "text/plain", "Invalid request");
+        
     }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
         // Body handler
         if (!index) {
@@ -256,12 +254,29 @@ void WebServer::setupRoutes() {
     
     server.on("/api/volume", HTTP_POST, [this](AsyncWebServerRequest *request) {
         if (request->hasParam("value", true)) {
+            static uint32_t lastVolumeUpdate = 0;
+            const uint32_t VOLUME_UPDATE_INTERVAL = 50;  // 50ms'ye düşürdük
+            
+            // Çok sık volume güncellemesini engelle
+            uint32_t currentTime = millis();
+            if (currentTime - lastVolumeUpdate < VOLUME_UPDATE_INTERVAL) {
+                request->send(200);
+                return;
+            }
+            
             int volume = request->getParam("value", true)->value().toInt();
-            Serial.printf("Setting volume to: %d\n", volume);
+            
+            // Volume değerini sınırla
+            volume = constrain(volume, 0, 100);
+            
             audioManager.setVolume(volume);
-            request->send(200);
+            lastVolumeUpdate = currentTime;
+            
+            // Hızlı yanıt ver
+            AsyncWebServerResponse *response = request->beginResponse(200);
+            response->addHeader("Access-Control-Allow-Origin", "*");
+            request->send(response);
         } else {
-            Serial.println("Missing volume parameter");
             request->send(400, "text/plain", "Missing volume parameter");
         }
     });
@@ -273,20 +288,39 @@ void WebServer::handleFileUpload(AsyncWebServerRequest *request, String filename
     static File uploadFile;
     
     if (!index) {
-        Serial.printf("Upload Start: %s\n", filename.c_str());
+        Serial.printf(" Upload Start: %s\n", filename.c_str());
+        
+        // Dosya adını kontrol et
+        if (!filename.endsWith(".mp3")) {
+            request->send(400, "text/plain", "Only MP3 files are allowed");
+            return;
+        }
+        
+        // SD kart kontrolü
+        if (!SD.exists("/")) {
+            request->send(500, "text/plain", "SD card not mounted");
+            return;
+        }
+        
         uploadFile = SD.open("/" + filename, FILE_WRITE);
+        if (!uploadFile) {
+            request->send(500, "text/plain", "Could not create file");
+            return;
+        }
     }
     
     if (uploadFile) {
-        uploadFile.write(data, len);
+        if (uploadFile.write(data, len) != len) {
+            uploadFile.close();
+            request->send(500, "text/plain", "Write error");
+            return;
+        }
         
         if (final) {
             uploadFile.close();
-            Serial.printf("Upload Complete: %s, %u bytes\n", filename.c_str(), index + len);
+            Serial.printf("✅ Upload Complete: %s, %u bytes\n", filename.c_str(), index + len);
             request->send(200, "text/plain", "File uploaded successfully");
         }
-    } else {
-        request->send(500, "text/plain", "Could not create file");
     }
 }
 

@@ -107,4 +107,9 @@ struct SystemStatus {
 #define AUDIO_BUFFER_SIZE 8192
 #define AUDIO_TASK_PRIORITY 3
 
+// I2S Configuration
+#define I2S_PORT I2S_NUM_0
+#define I2S_DMA_BUFFER_COUNT 8
+#define I2S_DMA_BUFFER_LEN 1024
+
 #endif // CONFIG_H 

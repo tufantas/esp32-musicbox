@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <SD.h>
 #include "config.h"
+#include "FileManager.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
@@ -14,6 +15,7 @@
 
 class AudioManager {
 private:
+    FileManager& fileManager;
     int currentVolume;
     bool isPlaying;
     String currentTrack;
@@ -38,7 +40,8 @@ private:
     }
 
 public:
-    AudioManager() : 
+    AudioManager(FileManager& fm) : 
+        fileManager(fm),
         currentVolume(DEFAULT_VOLUME),
         isPlaying(false),
         currentTrack(""),

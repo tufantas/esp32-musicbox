@@ -87,10 +87,28 @@ void FileManager::refreshMusicFiles() {
 }
 
 std::vector<String> FileManager::getMusicFiles() {
-    if (sdCardMounted) {
-        refreshMusicFiles();
+    std::vector<String> files;
+    File root = SD.open("/");
+    
+    while (File file = root.openNextFile()) {
+        String filename = file.name();
+        
+        // MP3 dosyası mı kontrol et
+        if (filename.endsWith(".mp3") || filename.endsWith(".MP3")) {
+            // Dosya adı geçerli mi kontrol et
+            if (isValidFilename(filename)) {
+                Serial.printf("Found music file: %s\n", filename.c_str());
+                files.push_back("/" + filename);
+            } else {
+                Serial.printf("⚠️ Skipping invalid filename: %s\n", filename.c_str());
+            }
+        }
+        file.close();
     }
-    return musicFiles;
+    
+    root.close();
+    Serial.printf("Total music files found: %d\n", files.size());
+    return files;
 }
 
 bool FileManager::exists(const char* path) {
@@ -225,4 +243,26 @@ void FileManager::listSPIFFSContents() {
 
 bool FileManager::existsInSPIFFS(const char* path) {
     return SPIFFS.exists(path);
+}
+
+bool FileManager::isValidFilename(const String& filename) {
+    // Başındaki / karakterini kontrol et ve atla
+    int startIndex = filename.startsWith("/") ? 1 : 0;
+    
+    // Sadece alfanumerik karakterler, nokta, tire, alt çizgi ve boşluğa izin ver
+    for (size_t i = startIndex; i < filename.length(); i++) {
+        char c = filename.charAt(i);
+        if (!isalnum(c) && c != '.' && c != '-' && c != '_' && c != ' ') {
+            Serial.printf("Invalid character in filename: '%c' (0x%02x)\n", c, c);
+            return false;
+        }
+    }
+    
+    // MP3 uzantısını kontrol et
+    if (!filename.endsWith(".mp3") && !filename.endsWith(".MP3")) {
+        Serial.println("Invalid file extension");
+        return false;
+    }
+    
+    return true;
 } 

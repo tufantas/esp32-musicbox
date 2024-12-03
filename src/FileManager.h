@@ -53,6 +53,8 @@ public:
     static bool existsInSPIFFS(const char* path);
     
     String getFileInfo(const char* path);
+    
+    bool isValidFilename(const String& filename);
 };
 
 #endif // FILE_MANAGER_H 

@@ -3,6 +3,7 @@
 <head>
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <link rel='shortcut icon' href='#'>
     <link rel='stylesheet' href='https://use.fontawesome.com/releases/v5.15.4/css/all.min.css'>
     <link rel='stylesheet' href='css/style.css'>
     <title>ESP32 Music Box</title>
@@ -28,6 +29,20 @@
             <p>Now Playing: <span id='currentTrack'>-</span></p>
             <p>Temperature: <span id='temperature'>-</span>°C</p>
             <p>WiFi: <span id='wifiStatus'>-</span></p>
+        </div>
+
+        <div class='upload-section'>
+            <h2>Upload Music</h2>
+            <form id='uploadForm' enctype='multipart/form-data'>
+                <input type='file' id='fileInput' name='file' accept='.mp3' multiple>
+                <button type='submit' class='upload-btn'>Upload</button>
+            </form>
+            <div id='uploadProgress' style='display: none;'>
+                <div class='progress-bar'>
+                    <div class='progress' id='progressBar'></div>
+                </div>
+                <span id='progressText'>0%</span>
+            </div>
         </div>
 
         <div class='playlist'>

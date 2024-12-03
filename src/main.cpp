@@ -20,13 +20,13 @@ RTC_DS3231 rtc;
 AsyncWebServer server(WEB_SERVER_PORT);
 
 // Yönetici sınıfları
-AudioManager audioManager;
 FileManager fileManager;
+AudioManager audioManager(fileManager);
 TimeManager timeManager(rtc);
 MQTTManager mqttManager(audioManager, timeManager);
 WifiManager wifiManager(server);
 BluetoothManager bleManager(audioManager, timeManager);
-WebServer webServer(server, audioManager, fileManager, timeManager, mqttManager, bleManager);
+WebServer webServer(server, audioManager, fileManager, timeManager, mqttManager);
 
 // Sistem durumu
 SystemStatus systemStatus = {
@@ -90,7 +90,7 @@ void setup() {
     
     // Web Server'ı başlat
     Serial.println("\n=== Initializing Web Server ===");
-    if (!webServer.begifn()) {
+    if (!webServer.begin()) {
         Serial.println("❌ Failed to initialize Web Server!");
         setStatusLED(255, 0, 0);
         return;

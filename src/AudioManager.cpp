@@ -1,55 +1,140 @@
 #include "AudioManager.h"
+#include <Arduino.h>
+#include <SD.h>
+#include "config.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/queue.h>
+#include "AudioFileSourceSD.h"
+#include "AudioFileSourceID3.h"
+#include "AudioGeneratorMP3.h"
+#include "AudioOutputI2S.h"
+#include "driver/i2s.h"
 
+// Static üye değişkenini tanımla
 QueueHandle_t AudioManager::audioQueue = NULL;
 
 bool AudioManager::begin() {
-    // I2S çıkışını başlat
-    out = new AudioOutputI2S(AUDIO_BUFFER_SIZE); // Buffer size'ı constructor'da belirt
-    out->SetPinout(I2S_BCLK, I2S_LRCK, I2S_DOUT);
+    Serial.println("\n=== Initializing Audio System ===");
     
-    // I2S konfigürasyonunu ayarla
-    out->SetBitsPerSample(16);
-    out->SetChannels(2);
-    out->SetRate(44100);
-    out->SetGain(((float)currentVolume) / 100.0);
+    // PCM5102 pin kontrolü
+    pinMode(I2S_BCLK, OUTPUT);
+    pinMode(I2S_LRCK, OUTPUT);
+    pinMode(I2S_DOUT, OUTPUT);
     
-    // Stereo mod
-    out->SetOutputModeMono(false);
+    // I2S konfigürasyonu
+    i2s_config_t i2s_config = {
+        .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
+        .sample_rate = 44100,
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+        .communication_format = I2S_COMM_FORMAT_STAND_I2S,
+        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+        .dma_buf_count = 16,
+        .dma_buf_len = 512,
+        .use_apll = true,
+        .tx_desc_auto_clear = true,
+        .fixed_mclk = 0
+    };
     
-    // Audio task'ı daha yüksek öncelikle başlat
+    // I2S pinlerini ayarla
+    i2s_pin_config_t pin_config = {
+        .bck_io_num = I2S_BCLK,
+        .ws_io_num = I2S_LRCK,
+        .data_out_num = I2S_DOUT,
+        .data_in_num = I2S_PIN_NO_CHANGE
+    };
+    
+    // I2S sürücüsünü başlat
+    i2s_driver_uninstall(I2S_NUM_0);  // Önce kaldır
+    delay(100);
+    
+    if (i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL) != ESP_OK) {
+        Serial.println("❌ Failed to install I2S driver");
+        return false;
+    }
+    
+    if (i2s_set_pin(I2S_NUM_0, &pin_config) != ESP_OK) {
+        Serial.println("❌ Failed to set I2S pins");
+        return false;
+    }
+    
+    // Audio task'ı başlat
     xTaskCreatePinnedToCore(
         audioTask,
         "AudioTask",
-        8192,  // Stack size
+        8192,
         this,
-        AUDIO_TASK_PRIORITY,     // Priority'yi config'den al
+        AUDIO_TASK_PRIORITY,
         &audioTaskHandle,
-        1      // Tekrar Core 1'e alalım
+        1
     );
+    
+    // Test sinyali gönder
+    const int samples = 256;
+    int16_t buffer[samples * 2];
+    
+    for(int i = 0; i < samples; i++) {
+        float t = (float)i / 44100.0f;
+        float value = sin(2.0f * PI * 1000.0f * t);
+        int16_t sample = (int16_t)(value * 32767.0f);
+        
+        buffer[i*2] = sample;
+        buffer[i*2+1] = sample;
+    }
+    
+    for(int j = 0; j < 100; j++) {
+        size_t bytes_written;
+        i2s_write(I2S_NUM_0, buffer, sizeof(buffer), &bytes_written, portMAX_DELAY);
+    }
+    
+    // Sessizken çıkışı mute et
+    if (out) {
+        out->SetOutputModeMono(false);  // Stereo mod
+        out->SetGain(0);  // Başlangıçta sessiz
+    }
     
     return true;
 }
 
-void AudioManager::audioTask(void* parameter) {
-    AudioManager* audio = (AudioManager*)parameter;
-    String filename;
+void AudioManager::play(const String& filename) {
+    // Dosya adı kontrolü
+    if (!fileManager.isValidFilename(filename)) {
+        Serial.printf("❌ Invalid filename: %s\n", filename.c_str());
+        return;
+    }
     
-    while (true) {
-        if (xQueueReceive(audioQueue, &filename, portMAX_DELAY)) {
-            audio->processAudio();
+    if (SD.exists(filename)) {
+        // Eğer şu an çalan bir şey varsa, önce onu durdur
+        if (isPlaying) {
+            stopPlaying();
+            delay(50);
         }
-        vTaskDelay(1);  // Watchdog'u resetle
+        
+        currentTrack = filename;
+        isPlaying = true;
+        
+        // Kuyruğu temizle ve yeni parçayı ekle
+        xQueueReset(audioQueue);
+        String* trackCopy = new String(filename);
+        if (xQueueSend(audioQueue, &trackCopy, portMAX_DELAY) != pdPASS) {
+            delete trackCopy;
+            Serial.println("❌ Failed to send to queue");
+            return;
+        }
+        
+        Serial.printf("▶️ Playing: %s\n", filename.c_str());
+    } else {
+        Serial.printf("❌ File not found: %s\n", filename.c_str());
     }
 }
 
 void AudioManager::processAudio() {
     if (!currentTrack.length()) return;
     
-    stopPlaying();
+    Serial.printf("\n Processing audio: %s\n", currentTrack.c_str());
     
-    // Debug bilgisi
-    Serial.printf(" Trying to play: %s\n", currentTrack.c_str());
-    
+    // Yeni kaynakları oluştur
     file = new AudioFileSourceSD(currentTrack.c_str());
     if (!file) {
         Serial.println("❌ Failed to open file!");
@@ -60,40 +145,35 @@ void AudioManager::processAudio() {
     if (!id3) {
         Serial.println("❌ Failed to create ID3 decoder!");
         delete file;
+        file = NULL;
         return;
     }
     
-    out = new AudioOutputI2S(AUDIO_BUFFER_SIZE); // Buffer size'ı constructor'da belirt
+    out = new AudioOutputI2S();
     out->SetPinout(I2S_BCLK, I2S_LRCK, I2S_DOUT);
     out->SetGain(((float)currentVolume) / 100.0);
-    out->SetOutputModeMono(false);
+    out->SetBitsPerSample(16);
+    out->SetChannels(2);
+    out->SetRate(44100);
     
     mp3 = new AudioGeneratorMP3();
-    if (!mp3) {
-        Serial.println("❌ Failed to create MP3 decoder!");
-        delete id3;
-        delete file;
-        delete out;
-        return;
-    }
-    
     if (!mp3->begin(id3, out)) {
         Serial.println("❌ Failed to start MP3 playback");
         stopPlaying();
         return;
     }
     
-    isPlaying = true;
-    Serial.printf("▶️ Playing: %s\n", currentTrack.c_str());
+    Serial.println("✅ MP3 playback started");
     
+    // Ana çalma döngüsü
     while (mp3->isRunning() && isPlaying) {
         if (!mp3->loop()) {
             mp3->stop();
             break;
         }
-        // Her 50 iterasyonda bir watchdog'u resetle
+        // Her 10 iterasyonda bir watchdog'u resetle
         static int counter = 0;
-        if (++counter >= 50) {
+        if (++counter >= 10) {
             vTaskDelay(1);
             counter = 0;
         } else {
@@ -103,6 +183,11 @@ void AudioManager::processAudio() {
 }
 
 void AudioManager::stopPlaying() {
+    // Önce çalmayı durdur
+    isPlaying = false;
+    delay(50);  // Kısa bir bekleme ekle
+    
+    // Kaynakları temizle
     if (mp3) {
         mp3->stop();
         delete mp3;
@@ -117,46 +202,97 @@ void AudioManager::stopPlaying() {
         file = NULL;
     }
     if (out) {
+        out->SetGain(0);  // Önce sesi kapat
         delete out;
         out = NULL;
     }
-    isPlaying = false;
 }
 
-void AudioManager::play(const String& filename) {
-    if (SD.exists(filename)) {
-        currentTrack = filename;
-        isPlaying = true;
-        xQueueSend(audioQueue, &filename, portMAX_DELAY);
+void AudioManager::loop() {
+    // Audio task zaten çalışıyor, burada ekstra bir şey yapmamıza gerek yok
+}
+
+void AudioManager::play() {
+    if (currentTrack.length() > 0) {
+        play(currentTrack);
     }
 }
 
 void AudioManager::pause() {
-    if (isPlaying) {
-        Serial.println("Pausing playback");
+    if (mp3) {
+        mp3->stop();
         isPlaying = false;
-        if (out) {
-            out->stop();
-        }
     }
 }
 
 void AudioManager::stop() {
-    Serial.println("Stopping playback");
-    isPlaying = false;
-    currentTrack = "";
-    if (out) {
-        out->stop();
+    stopPlaying();
+}
+
+void AudioManager::next() {
+    // Bir sonraki parçayı çal
+    auto files = fileManager.getMusicFiles();
+    if (files.size() == 0) return;
+
+    // Mevcut parçanın indexini bul
+    int currentIndex = -1;
+    for (size_t i = 0; i < files.size(); i++) {
+        if (files[i] == currentTrack) {
+            currentIndex = i;
+            break;
+        }
     }
+
+    // Bir sonraki parçaya geç
+    int nextIndex = (currentIndex + 1) % files.size();
+    play(files[nextIndex]);
+}
+
+void AudioManager::previous() {
+    // Önceki parçayı çal
+    auto files = fileManager.getMusicFiles();
+    if (files.size() == 0) return;
+
+    // Mevcut parçanın indexini bul
+    int currentIndex = -1;
+    for (size_t i = 0; i < files.size(); i++) {
+        if (files[i] == currentTrack) {
+            currentIndex = i;
+            break;
+        }
+    }
+
+    // Önceki parçaya geç
+    int prevIndex = (currentIndex - 1 + files.size()) % files.size();
+    play(files[prevIndex]);
 }
 
 void AudioManager::setVolume(int volume) {
     if (volume < 0) volume = 0;
     if (volume > 100) volume = 100;
+    
+    // Volume değişimi çok küçükse işlem yapma
+    if (abs(currentVolume - volume) < 2) {
+        return;
+    }
+    
     currentVolume = volume;
     
     if (out) {
-        out->SetGain(((float)volume) / 100.0);
+        // Volume kontrolünü doğrusal hale getir
+        float gain = ((float)volume) / 100.0;  // 200.0 yerine 100.0 kullanıyoruz
+        
+        // Logaritmik scale uygula
+        gain = pow(gain, 1.5);  // Daha doğal bir ses artışı için
+        
+        // Gain değerini sınırla
+        if (gain > 1.0) gain = 1.0;
+        if (gain < 0.0) gain = 0.0;
+        
+        out->SetGain(gain);
+        
+        // Debug
+        Serial.printf("Volume: %d%%, Gain: %.2f\n", volume, gain);
     }
 }
 
@@ -164,120 +300,27 @@ int AudioManager::getVolume() const {
     return currentVolume;
 }
 
-void AudioManager::loop() {
-    static unsigned long lastUpdate = 0;
-    const unsigned long updateInterval = 5000;  // Her 5 saniyede bir güncelle
-    
-    if (millis() - lastUpdate >= updateInterval) {
-        lastUpdate = millis();
-        if (isPlaying) {
-            Serial.printf("Playing: %s (Volume: %d%%)\n", currentTrack.c_str(), currentVolume);
-        }
-    }
-}
-
-void AudioManager::next() {
-    // Şu anki dosyanın dizinini bul
-    File root = SD.open("/");
-    File file = root.openNextFile();
-    bool foundCurrent = false;
-    String nextTrack = "";
-    
-    // Dosyaları tara
-    while (file) {
-        String fileName = file.name();
-        if (fileName.endsWith(".mp3")) {  // Sadece MP3 dosyalarını kontrol et
-            if (foundCurrent) {
-                // Mevcut parçadan sonraki ilk MP3'ü bul
-                nextTrack = fileName;
-                break;
-            }
-            if (("/" + fileName) == currentTrack) {
-                foundCurrent = true;
-            }
-        }
-        file = root.openNextFile();
-    }
-    
-    // Eğer sonraki parça bulunamadıysa veya son parçadaysak başa dön
-    if (nextTrack.isEmpty()) {
-        root.rewindDirectory();
-        file = root.openNextFile();
-        while (file) {
-            String fileName = file.name();
-            if (fileName.endsWith(".mp3")) {
-                nextTrack = fileName;
-                break;
-            }
-            file = root.openNextFile();
-        }
-    }
-    
-    // Dosyaları kapat
-    file.close();
-    root.close();
-    
-    // Yeni parçayı çal
-    if (!nextTrack.isEmpty()) {
-        play("/" + nextTrack);
-    }
-}
-
-void AudioManager::previous() {
-    // Şu anki dosyanın dizinini bul
-    File root = SD.open("/");
-    File file = root.openNextFile();
-    String prevTrack = "";
-    String currentFile = "";
-    
-    // Dosyaları tara
-    while (file) {
-        String fileName = file.name();
-        if (fileName.endsWith(".mp3")) {
-            if (("/" + fileName) == currentTrack) {
-                // Eğer önceki parça kaydedildiyse onu kullan
-                if (!prevTrack.isEmpty()) {
-                    break;
-                }
-                // Eğer ilk parçadaysak son parçaya git
-                else {
-                    while (file = root.openNextFile()) {
-                        String nextName = file.name();
-                        if (nextName.endsWith(".mp3")) {
-                            prevTrack = nextName;
-                        }
-                    }
-                    break;
-                }
-            }
-            prevTrack = fileName;
-        }
-        file = root.openNextFile();
-    }
-    
-    // Dosyaları kapat
-    file.close();
-    root.close();
-    
-    // Önceki parçayı çal
-    if (!prevTrack.isEmpty()) {
-        play("/" + prevTrack);
-    }
-}
-
-void AudioManager::play() {
-    if (!isPlaying && currentTrack.length() > 0) {
-        isPlaying = true;
-        xQueueSend(audioQueue, &currentTrack, portMAX_DELAY);
-    }
-}
-
 void AudioManager::printDebugInfo() {
-    Serial.printf("Track: %s, Volume: %d%%, Playing: %s\n", 
-        currentTrack.c_str(), 
-        currentVolume,
-        isPlaying ? "Yes" : "No"
-    );
+    Serial.println("\n=== Audio Debug Info ===");
+    Serial.printf("Current Track: %s\n", currentTrack.c_str());
+    Serial.printf("Is Playing: %s\n", isPlaying ? "Yes" : "No");
+    Serial.printf("Volume: %d%%\n", currentVolume);
+    Serial.println("=====================\n");
 }
 
-// Playlist yönetimi fonksiyonları daha sonra eklenecek 
+// Static audio task
+void AudioManager::audioTask(void* parameter) {
+    AudioManager* audio = (AudioManager*)parameter;
+    String* trackPtr;
+    
+    while (true) {
+        if (xQueueReceive(audioQueue, &trackPtr, portMAX_DELAY)) {
+            if (trackPtr) {
+                audio->currentTrack = *trackPtr;  // String'i kopyala
+                delete trackPtr;  // Belleği temizle
+                audio->processAudio();
+            }
+        }
+        vTaskDelay(1);
+    }
+}
