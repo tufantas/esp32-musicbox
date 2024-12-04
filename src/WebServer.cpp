@@ -113,10 +113,20 @@ void WebServer::setupRoutes() {
         doc["playing"] = audioManager.isCurrentlyPlaying();
         
         // Sıcaklık ve zaman bilgileri
-        doc["temperature"] = timeManager.getTemperature();
+        doc["temperature"] = timeManager.getTemperature();  // Sıcaklığı ekle
+        
+        // Zaman bilgileri
         DateTime now = timeManager.getDateTime();
         doc["time"]["hour"] = now.hour();
         doc["time"]["minute"] = now.minute();
+        doc["time"]["second"] = now.second();
+        doc["time"]["date"]["day"] = now.day();
+        doc["time"]["date"]["month"] = now.month();
+        doc["time"]["date"]["year"] = now.year();
+        
+        // Şarkı ilerleme bilgisi
+        doc["track_position"] = audioManager.getCurrentPosition();
+        doc["track_duration"] = audioManager.getTrackDuration();
         
         String output;
         serializeJson(doc, output);
@@ -191,9 +201,30 @@ void WebServer::setupRoutes() {
         Serial.println("\n=== Play Request ===");
         
         // POST verilerini al
-        if (request->_tempObject) {
-            String json = String((char*)request->_tempObject);  // String kopyası oluştur
-            free(request->_tempObject);  // Hemen belleği temizle
+        if (request->hasParam("file", true)) {  // form-data için
+            String file = request->getParam("file", true)->value();
+            Serial.printf("Playing file (form-data): %s\n", file.c_str());
+            
+            // M4A/AAC kontrolü
+            if (file.endsWith(".m4a") || file.endsWith(".aac")) {
+                String message = "⚠️ M4A/AAC dosya desteği geliştirme aşamasındadır.\n";
+                message += "Lütfen MP3 formatında müzik dosyaları kullanın.\n";
+                message += "Bu özellik bir sonraki güncellemede eklenecektir.";
+                request->send(400, "text/plain", message);
+                return;
+            }
+            
+            if (file.startsWith("/")) {
+                file = file.substring(1);
+            }
+            
+            audioManager.play("/" + file);
+            request->send(200);
+            return;
+        }
+        else if (request->_tempObject) {  // JSON için
+            String json = String((char*)request->_tempObject);
+            free(request->_tempObject);
             request->_tempObject = NULL;
             
             Serial.printf("Raw body: %s\n", json.c_str());
@@ -203,13 +234,13 @@ void WebServer::setupRoutes() {
             
             if (!error && doc.containsKey("file")) {
                 String file = doc["file"].as<String>();
-                Serial.printf("Playing file: %s\n", file.c_str());
+                Serial.printf("Playing file (JSON): %s\n", file.c_str());
                 
                 if (file.startsWith("/")) {
-                    file = file.substring(1);  // Baştaki / karakterini kaldır
+                    file = file.substring(1);
                 }
                 
-                audioManager.play("/" + file);  // Başına / ekleyerek gönder
+                audioManager.play("/" + file);
                 request->send(200);
                 return;
             }
@@ -280,6 +311,46 @@ void WebServer::setupRoutes() {
             request->send(400, "text/plain", "Missing volume parameter");
         }
     });
+    
+    // Dosya silme endpoint'i
+    server.on("/api/delete", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (request->hasParam("file", true)) {
+            String file = request->getParam("file", true)->value();
+            
+            // Dosya adını temizle
+            if (file.startsWith("/")) {
+                file = file.substring(1);
+            }
+            
+            // Dosyayı sil
+            if (SD.remove("/" + file)) {
+                Serial.printf("✅ File deleted: %s\n", file.c_str());
+                request->send(200);
+            } else {
+                Serial.printf("❌ Failed to delete file: %s\n", file.c_str());
+                request->send(500, "text/plain", "Failed to delete file");
+            }
+        } else {
+            request->send(400, "text/plain", "Missing file parameter");
+        }
+    });
+    
+    // Resume endpoint'i
+    server.on("/api/resume", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (audioManager.getCurrentTrack().length() > 0) {
+            audioManager.play();  // Mevcut parçayı devam ettir
+            request->send(200);
+        } else {
+            // Eğer hiç şarkı seçilmemişse, ilk şarkıyı çal
+            auto files = fileManager.getMusicFiles();
+            if (!files.empty()) {
+                audioManager.play(files[0]);
+                request->send(200);
+            } else {
+                request->send(400, "text/plain", "No track to resume");
+            }
+        }
+    });
 }
 
 void WebServer::handleFileUpload(AsyncWebServerRequest *request, String filename, 
@@ -288,38 +359,54 @@ void WebServer::handleFileUpload(AsyncWebServerRequest *request, String filename
     static File uploadFile;
     
     if (!index) {
-        Serial.printf(" Upload Start: %s\n", filename.c_str());
+        Serial.printf("\n Upload Start: %s\n", filename.c_str());
         
-        // Dosya adını kontrol et
-        if (!filename.endsWith(".mp3")) {
-            request->send(400, "text/plain", "Only MP3 files are allowed");
-            return;
+        // Dosya adını temizle (sadece boşlukları değiştir)
+        filename.replace(" ", "_");
+        
+        // Dosya uzantısını kontrol et
+        int dotIndex = filename.lastIndexOf(".");
+        if (dotIndex > 0) {
+            String ext = filename.substring(dotIndex);
+            ext.toLowerCase();
+            
+            if (ext != ".mp3" && ext != ".m4a" && 
+                ext != ".aac" && ext != ".wav") {
+                request->send(400, "text/plain", "Desteklenmeyen dosya formatı");
+                return;
+            }
         }
         
         // SD kart kontrolü
         if (!SD.exists("/")) {
-            request->send(500, "text/plain", "SD card not mounted");
+            request->send(500, "text/plain", "SD kart bulunamadı");
             return;
         }
         
+        // Dosyayı aç
         uploadFile = SD.open("/" + filename, FILE_WRITE);
         if (!uploadFile) {
-            request->send(500, "text/plain", "Could not create file");
+            request->send(500, "text/plain", "Dosya oluşturulamadı");
             return;
         }
+        
+        Serial.printf("📝 Creating file: /%s\n", filename.c_str());
     }
     
     if (uploadFile) {
         if (uploadFile.write(data, len) != len) {
             uploadFile.close();
-            request->send(500, "text/plain", "Write error");
+            request->send(500, "text/plain", "Yazma hatası");
             return;
         }
         
         if (final) {
             uploadFile.close();
             Serial.printf("✅ Upload Complete: %s, %u bytes\n", filename.c_str(), index + len);
-            request->send(200, "text/plain", "File uploaded successfully");
+            request->send(200, "text/plain", "Dosya başarıyla yüklendi");
+            
+            // Müzik listesini güncelle
+            fileManager.getMusicFiles();  // refreshMusicFiles yerine public metodu kullan
         }
     }
 }
@@ -407,6 +494,8 @@ String WebServer::getContentType(const String& filename) {
     else if (filename.endsWith(".json")) return "application/json";
     else if (filename.endsWith(".ico")) return "image/x-icon";
     else if (filename.endsWith(".mp3")) return "audio/mpeg";
+    else if (filename.endsWith(".m4a")) return "audio/mp4";
+    else if (filename.endsWith(".aac")) return "audio/aac";
     else if (filename.endsWith(".wav")) return "audio/wav";
     return "text/plain";
 }

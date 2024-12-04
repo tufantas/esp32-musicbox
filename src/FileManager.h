@@ -15,9 +15,6 @@ private:
     // Dosya uzantısı kontrolü
     bool isMusicFile(const String& filename);
     
-    // Dosya listesini yenile
-    void refreshMusicFiles();
-    
     void printDirectory(File dir, int numTabs);
     
     // Yardımcı fonksiyonlar
@@ -29,6 +26,7 @@ public:
     // Temel işlevler
     bool begin();
     void end();
+    void refreshMusicFiles();
     
     // Dosya işlemleri
     bool exists(const char* path);

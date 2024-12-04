@@ -1,8 +1,11 @@
 #include "WifiManager.h"
+#include <ESPmDNS.h>
 
 bool WifiManager::begin() {
     Serial.println("\n=== WiFi Manager Debug Start ===");
     Serial.println("Function: begin()");
+    
+    // Memory durumunu kontrol et
     Serial.printf("Memory free: %d bytes\n", ESP.getFreeHeap());
     
     // Preferences başlat
@@ -24,6 +27,17 @@ bool WifiManager::begin() {
         Serial.printf("Password length: %d\n", password.length());
         
         if (connectToWiFi()) {
+            // mDNS'i başlat
+            if (!MDNS.begin("musicbox")) {
+                Serial.println("❌ Error setting up MDNS responder!");
+            } else {
+                Serial.println("✅ mDNS responder started");
+                Serial.println("Device can be reached at: http://musicbox.local");
+                
+                // HTTP ve OTA servislerini kaydet
+                MDNS.addService("http", "tcp", 80);
+                MDNS.addService("ota", "tcp", 3232);
+            }
             return true;
         }
         Serial.println("❌ Connection failed with saved credentials");
@@ -42,7 +56,7 @@ bool WifiManager::begin() {
 void WifiManager::setupAP() {
     WiFi.mode(WIFI_AP);
     WiFi.softAPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
-    WiFi.softAP("ESP32_MusicBox");
+    WiFi.softAP(WIFI_AP_SSID);
     
     Serial.println("AP Mode Started");
     Serial.printf("IP: %s\n", WiFi.softAPIP().toString().c_str());
@@ -57,23 +71,6 @@ void WifiManager::setupAP() {
 }
 
 void WifiManager::setupWebServer() {
-    // Captive portal için gerekli yönlendirmeler
-    server.on("/generate_204", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->redirect("/");
-    });
-    
-    server.on("/fwlink", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->redirect("/");
-    });
-    
-    server.on("/hotspot-detect.html", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->redirect("/");
-    });
-    
-    server.on("/connectivity-check", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->redirect("/");
-    });
-    
     // WiFi ağlarını tara
     server.on("/scan", HTTP_GET, [](AsyncWebServerRequest *request) {
         String json = "[";
@@ -141,101 +138,45 @@ void WifiManager::setupWebServer() {
         request->send(200, "text/html", html);
     });
     
-    // Bağlantı isteği
+    // Bağlantı isteği için endpoint
     server.on("/connect", HTTP_POST, [this](AsyncWebServerRequest *request) {
-        String newSSID, newPass;
         if (request->hasParam("ssid", true) && request->hasParam("pass", true)) {
-            newSSID = request->getParam("ssid", true)->value();
-            newPass = request->getParam("pass", true)->value();
+            String newSSID = request->getParam("ssid", true)->value();
+            String newPass = request->getParam("pass", true)->value();
             
+            Serial.println("\n=== New WiFi Credentials ===");
+            Serial.printf("SSID: %s\n", newSSID.c_str());
+            Serial.printf("Password length: %d\n", newPass.length());
+            
+            // Kimlik bilgilerini kaydet
             saveCredentials(newSSID, newPass);
-            request->send(200, "text/html", 
-                "<html><body><h2>Settings saved!</h2>"
-                "<p>ESP32 will restart and try to connect to the network.</p>"
-                "<script>setTimeout(function(){window.close()},3000);</script>"
-                "</body></html>");
             
+            // Başarılı yanıt gönder
+            String html = "<html><head>";
+            html += "<meta charset='UTF-8'>";
+            html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
+            html += "<style>";
+            html += "body{font-family:Arial;margin:20px;text-align:center;background:#f0f0f0}";
+            html += ".container{max-width:400px;margin:0 auto;background:white;padding:20px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1)}";
+            html += "</style>";
+            html += "</head><body><div class='container'>";
+            html += "<h2>✅ WiFi Ayarları Kaydedildi!</h2>";
+            html += "<p>ESP32 yeniden başlatılıyor ve ağa bağlanmaya çalışacak.</p>";
+            html += "<p>Bu pencereyi kapatabilirsiniz.</p>";
+            html += "<script>setTimeout(function(){window.close()},3000);</script>";
+            html += "</div></body></html>";
+            
+            request->send(200, "text/html", html);
+            
+            // 3 saniye bekle ve yeniden başlat
             delay(3000);
             ESP.restart();
         } else {
-            request->send(400, "text/plain", "Missing parameters");
+            request->send(400, "text/plain", "SSID veya şifre eksik!");
         }
-    });
-    
-    // 404 handler
-    server.onNotFound([](AsyncWebServerRequest *request) {
-        request->redirect("/");
     });
     
     server.begin();
-    Serial.println("Web Server Started");
-}
-
-bool WifiManager::connectToWiFi() {
-    if (ssid.length() == 0) {
-        Serial.println("❌ No SSID configured");
-        return false;
-    }
-    
-    Serial.println("\n=== WiFi Connection Debug ===");
-    Serial.printf("Attempting to connect to: %s\n", ssid.c_str());
-    
-    // Önceki bağlantıyı temizle
-    Serial.println("1. Disconnecting from any previous networks...");
-    WiFi.disconnect(true);
-    delay(1000);
-    
-    // WiFi modunu ayarla
-    Serial.println("2. Setting WiFi mode to STATION...");
-    WiFi.mode(WIFI_STA);
-    delay(100);
-    
-    // MAC adresini göster
-    Serial.printf("3. MAC Address: %s\n", WiFi.macAddress().c_str());
-    
-    // Bağlantıyı başlat
-    Serial.println("4. Starting connection...");
-    WiFi.begin(ssid.c_str(), password.c_str());
-    
-    Serial.println("5. Waiting for connection...");
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-        delay(500);
-        Serial.printf("Status: %d ", WiFi.status());
-        switch(WiFi.status()) {
-            case WL_IDLE_STATUS: Serial.println("(IDLE)"); break;
-            case WL_NO_SSID_AVAIL: Serial.println("(NO SSID AVAILABLE)"); break;
-            case WL_SCAN_COMPLETED: Serial.println("(SCAN COMPLETED)"); break;
-            case WL_CONNECTED: Serial.println("(CONNECTED)"); break;
-            case WL_CONNECT_FAILED: Serial.println("(CONNECT FAILED)"); break;
-            case WL_CONNECTION_LOST: Serial.println("(CONNECTION LOST)"); break;
-            case WL_DISCONNECTED: Serial.println("(DISCONNECTED)"); break;
-            default: Serial.println("(UNKNOWN)"); break;
-        }
-        attempts++;
-    }
-    
-    if (WiFi.status() == WL_CONNECTED) {
-        isConnected = true;
-        Serial.println("\n=== WiFi Connected Successfully ===");
-        Serial.printf("SSID: %s\n", WiFi.SSID().c_str());
-        Serial.printf("IP Address: %s\n", WiFi.localIP().toString().c_str());
-        Serial.printf("Gateway: %s\n", WiFi.gatewayIP().toString().c_str());
-        Serial.printf("DNS: %s\n", WiFi.dnsIP().toString().c_str());
-        Serial.printf("Signal Strength: %d dBm\n", WiFi.RSSI());
-        Serial.println("==============================\n");
-        return true;
-    }
-    
-    Serial.println("\n❌ WiFi Connection Failed");
-    Serial.printf("Final Status: %d\n", WiFi.status());
-    Serial.println("==============================\n");
-    return false;
-}
-
-void WifiManager::saveCredentials(const String& newSSID, const String& newPass) {
-    preferences.putString("ssid", newSSID);
-    preferences.putString("password", newPass);
 }
 
 bool WifiManager::loadCredentials() {
@@ -249,10 +190,132 @@ bool WifiManager::loadCredentials() {
     return ssid.length() > 0;
 }
 
+void WifiManager::saveCredentials(const String& newSSID, const String& newPass) {
+    preferences.putString("ssid", newSSID);
+    preferences.putString("password", newPass);
+    
+    ssid = newSSID;
+    password = newPass;
+}
+
+bool WifiManager::connectToWiFi() {
+    if (ssid.length() == 0) {
+        Serial.println("❌ No SSID configured");
+        return false;
+    }
+    
+    Serial.println("\n=== WiFi Connection Debug ===");
+    Serial.printf("Attempting to connect to: %s\n", ssid.c_str());
+    
+    // WiFi'ı tamamen kapat
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    delay(1000);
+    
+    // WiFi'ı yeniden başlat
+    WiFi.mode(WIFI_STA);
+    delay(100);
+    
+    // MAC adresini göster
+    Serial.printf("MAC Address: %s\n", WiFi.macAddress().c_str());
+    
+    // WiFi parametrelerini ayarla
+    WiFi.setAutoReconnect(true);
+    WiFi.persistent(true);
+    
+    // Bağlantıyı başlat
+    Serial.println("Starting connection...");
+    WiFi.begin(ssid.c_str(), password.c_str());
+    
+    Serial.println("Waiting for connection...");
+    int attempts = 0;
+    const int maxAttempts = 30;  // 30 deneme (15 saniye)
+    
+    while (WiFi.status() != WL_CONNECTED && attempts < maxAttempts) {
+        delay(500);
+        Serial.printf("Attempt %d/%d - Status: ", attempts + 1, maxAttempts);
+        
+        switch(WiFi.status()) {
+            case WL_IDLE_STATUS: 
+                Serial.println("IDLE"); 
+                // IDLE durumunda biraz daha bekle
+                delay(1000);
+                break;
+            case WL_NO_SSID_AVAIL: 
+                Serial.println("NO SSID AVAILABLE"); 
+                return false;  // SSID bulunamadıysa hemen çık
+            case WL_SCAN_COMPLETED: 
+                Serial.println("SCAN COMPLETED"); 
+                break;
+            case WL_CONNECTED: 
+                Serial.println("CONNECTED"); 
+                break;
+            case WL_CONNECT_FAILED: 
+                Serial.println("CONNECT FAILED"); 
+                return false;  // Bağlantı başarısız olduysa hemen çık
+            case WL_CONNECTION_LOST: 
+                Serial.println("CONNECTION LOST"); 
+                break;
+            case WL_DISCONNECTED: 
+                Serial.println("DISCONNECTED"); 
+                break;
+            default: 
+                Serial.println("UNKNOWN"); 
+                break;
+        }
+        attempts++;
+    }
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        isConnected = true;
+        String ip = WiFi.localIP().toString();
+        
+        Serial.println("\n=== WiFi Connected Successfully ===");
+        Serial.printf("SSID: %s\n", WiFi.SSID().c_str());
+        Serial.printf("IP Address: %s\n", ip.c_str());
+        Serial.println("==============================");
+        Serial.println("\nWeb arayüzüne erişmek için tarayıcınızda şu adresi açın:");
+        Serial.printf("http://%s\n\n", ip.c_str());
+        
+        return true;
+    }
+    
+    Serial.println("\n❌ WiFi Connection Failed");
+    Serial.printf("Final Status: %d\n", WiFi.status());
+    Serial.println("==============================\n");
+    return false;
+}
+
 void WifiManager::loop() {
     static unsigned long lastCheck = 0;
     const unsigned long checkInterval = 1000;
     
+    if (millis() - lastCheck >= checkInterval) {
+        lastCheck = millis();
+        
+        if (WiFi.getMode() == WIFI_AP) {
+            dnsServer.processNextRequest();
+        }
+        
+        // WiFi bağlantı kontrolü
+        if (WiFi.status() != WL_CONNECTED && isConnected) {
+            isConnected = false;
+            Serial.println("WiFi connection lost!");
+            connectToWiFi();
+        } else if (WiFi.status() == WL_CONNECTED && !isConnected) {
+            isConnected = true;
+            // WiFi bağlantısı geri geldiğinde mDNS'i yeniden başlat
+            if (!MDNS.begin("musicbox")) {
+                Serial.println("❌ Error setting up MDNS responder!");
+            } else {
+                Serial.println("✅ mDNS responder restarted");
+                MDNS.addService("http", "tcp", 80);
+                MDNS.addService("ota", "tcp", 3232);
+            }
+        }
+    }
+    
+    // Seri port komutlarını kontrol et
     if (Serial.available()) {
         String cmd = Serial.readStringUntil('\n');
         cmd.trim();
@@ -268,20 +331,6 @@ void WifiManager::loop() {
             Serial.printf("SSID: %s\n", ssid.c_str());
             Serial.printf("IP: %s\n", getIP().c_str());
             Serial.println("==================\n");
-        }
-    }
-    
-    if (millis() - lastCheck >= checkInterval) {
-        lastCheck = millis();
-        
-        if (WiFi.getMode() == WIFI_AP) {
-            dnsServer.processNextRequest();
-        }
-        
-        if (WiFi.status() != WL_CONNECTED && isConnected) {
-            isConnected = false;
-            Serial.println("WiFi connection lost!");
-            connectToWiFi();
         }
     }
 }

@@ -233,9 +233,7 @@ void setup() {
 }
 
 void loop() {
-    // Tüm yönetici sınıfların loop fonksiyonlarını çağır
-    audioManager.loop();
-    timeManager.loop();
+    // Her yönetici için loop çağrısı
     wifiManager.loop();
     webServer.loop();
     mqttManager.loop();
@@ -246,9 +244,12 @@ void loop() {
     if (millis() - lastStatusUpdate >= 5000) {
         lastStatusUpdate = millis();
         
+        // Task'a nefes aldır
+        vTaskDelay(pdMS_TO_TICKS(10));
+        
         // Durum güncellemeleri
-        systemStatus.volume = audioManager.getVolume();  // Volume'u AudioManager'dan al
-        systemStatus.isPlaying = audioManager.isCurrentlyPlaying();  // Playing durumunu güncelle
+        systemStatus.volume = audioManager.getVolume();
+        systemStatus.isPlaying = audioManager.isCurrentlyPlaying();
         
         Serial.println("\n=== System Status ===");
         
@@ -274,6 +275,12 @@ void loop() {
         // Ses durumu
         Serial.printf("Volume: %d%%\n", systemStatus.volume);
         Serial.printf("Playing: %s\n", systemStatus.isPlaying ? "Yes" : "No");
+        if (systemStatus.isPlaying) {
+            Serial.printf("Current Track: %s\n", audioManager.getCurrentTrack().c_str());
+            Serial.printf("Position: %d/%d seconds\n", 
+                audioManager.getCurrentPosition(),
+                audioManager.getTrackDuration());
+        }
         
         // Ağ durumu
         Serial.printf("WiFi: %s\n", systemStatus.isWifiConnected ? "Connected" : "Disconnected");
@@ -282,8 +289,8 @@ void loop() {
         Serial.println("==================\n");
     }
     
-    // Watchdog yenileme
-    delay(10);
+    // Task'a nefes aldır
+    vTaskDelay(pdMS_TO_TICKS(10));
 }
 
 // printDirectory fonksiyonunu main.cpp'ye ekleyin

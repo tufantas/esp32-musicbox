@@ -41,6 +41,7 @@
 // WiFi Settings
 #define WIFI_AP_SSID "ESP32_MusicBox_Setup"
 #define WIFI_CONNECT_TIMEOUT 30000    // 30 saniye
+#define WIFI_CONNECT_DELAY 500        // 500ms
 
 // Web Server
 #define WEB_SERVER_PORT 80
@@ -52,19 +53,19 @@
 #define FADE_DELAY 50
 
 // System Settings
-#define WDT_TIMEOUT 60000  // 60 saniye
-#define MAX_RECONNECT_ATTEMPTS 3      // 3 deneme
-#define RECONNECT_DELAY 10000         // 10 saniye
+#define WDT_TIMEOUT 120000  // 120 saniye
+#define MAX_RECONNECT_ATTEMPTS 3
+#define RECONNECT_DELAY 10000
 
 // Debug Settings
 #ifdef DEBUG_MODE
     #define DEBUG_PRINT(x) Serial.print(x)
     #define DEBUG_PRINTLN(x) Serial.println(x)
-    #define DEBUG_STATUS(x) Serial.println(x)  // Durum mesajları için
+    #define DEBUG_STATUS(x) Serial.println(x)
 #else
     #define DEBUG_PRINT(x)
     #define DEBUG_PRINTLN(x)
-    #define DEBUG_STATUS(x) Serial.println(x)  // Debug mode kapalı olsa bile durum mesajları göster
+    #define DEBUG_STATUS(x) Serial.println(x)
 #endif
 
 // Error Codes

@@ -2,19 +2,35 @@
 #include <ArduinoJson.h>
 
 bool TimeManager::begin() {
+    Serial.println("\n=== Initializing Time Manager ===");
+    
     if (!rtc.begin()) {
-        Serial.println("RTC not found");
-        rtcPresent = false;
+        Serial.println("❌ Couldn't find RTC");
         return false;
     }
     
-    rtcPresent = true;
+    // Derleme zamanını al
+    DateTime buildTime = DateTime(F(__DATE__), F(__TIME__));
     
-    // RTC'nin gücü kesilmiş mi kontrol et
-    if (rtc.lostPower()) {
-        Serial.println("RTC lost power, setting time to compile time!");
-        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-    }
+    // Türkiye saati için 3 saat ekle (UTC -> UTC+3)
+    buildTime = buildTime + TimeSpan(0, 3, 0, 0);  // 3 saat ekle
+    
+    // RTC'yi ayarla
+    rtc.adjust(buildTime);
+    Serial.println("⚠️ RTC time adjusted to Turkey time (UTC+3)");
+    
+    // Mevcut zamanı göster
+    DateTime current = rtc.now();
+    char dateString[20];
+    char timeString[20];
+    
+    sprintf(dateString, "%02d/%02d/%04d", current.day(), current.month(), current.year());
+    sprintf(timeString, "%02d:%02d:%02d", current.hour(), current.minute(), current.second());
+    
+    Serial.println("✅ RTC initialized");
+    Serial.printf("Current Date: %s\n", dateString);
+    Serial.printf("Current Time: %s\n", timeString);
+    Serial.printf("Temperature: %.2f°C\n", rtc.getTemperature());
     
     return true;
 }

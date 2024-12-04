@@ -12,6 +12,7 @@
 #include "AudioFileSourceID3.h"
 #include "AudioGeneratorMP3.h"
 #include "AudioOutputI2S.h"
+#include "AudioGeneratorAAC.h"
 
 class AudioManager {
 private:
@@ -26,6 +27,7 @@ private:
     AudioFileSourceSD *file;
     AudioFileSourceID3 *id3;
     AudioGeneratorMP3 *mp3;
+    AudioGeneratorAAC *aac;
     AudioOutputI2S *out;
     
     // Audio task
@@ -38,20 +40,13 @@ private:
     uint16_t volumeToDacValue(int volume) {
         return (uint16_t)((volume * MAX_DAC_VALUE) / 100);
     }
+    
+    uint32_t trackDuration;    // Şarkının toplam süresi (saniye)
+    uint32_t currentPosition;  // Şu anki pozisyon (saniye)
+    uint32_t lastPositionUpdate;  // Son pozisyon güncellemesi zamanı
 
 public:
-    AudioManager(FileManager& fm) : 
-        fileManager(fm),
-        currentVolume(DEFAULT_VOLUME),
-        isPlaying(false),
-        currentTrack(""),
-        audioTaskHandle(NULL),
-        file(NULL),
-        id3(NULL),
-        mp3(NULL),
-        out(NULL) {
-        audioQueue = xQueueCreate(1, sizeof(String));
-    }
+    AudioManager(FileManager& fm);
     
     ~AudioManager() {
         stopPlaying();
@@ -94,6 +89,11 @@ public:
     
     // Mevcut kodun içine ekleyin
     void printDebugInfo();
+    
+    // Şarkı pozisyon kontrolü
+    uint32_t getCurrentPosition() const { return currentPosition; }
+    uint32_t getTrackDuration() const { return trackDuration; }
+    void updatePosition();  // Pozisyonu güncelle
 };
 
 #endif // AUDIO_MANAGER_H 

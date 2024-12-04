@@ -53,8 +53,9 @@ bool FileManager::isMusicFile(const String& filename) {
     String lowerCase = filename;
     lowerCase.toLowerCase();
     return lowerCase.endsWith(".mp3") || 
-           lowerCase.endsWith(".wav") || 
-           lowerCase.endsWith(".aac");
+           lowerCase.endsWith(".m4a") || 
+           lowerCase.endsWith(".aac") ||
+           lowerCase.endsWith(".wav");
 }
 
 void FileManager::refreshMusicFiles() {
@@ -93,8 +94,8 @@ std::vector<String> FileManager::getMusicFiles() {
     while (File file = root.openNextFile()) {
         String filename = file.name();
         
-        // MP3 dosyası mı kontrol et
-        if (filename.endsWith(".mp3") || filename.endsWith(".MP3")) {
+        // Müzik dosyası mı kontrol et
+        if (isMusicFile(filename)) {
             // Dosya adı geçerli mi kontrol et
             if (isValidFilename(filename)) {
                 Serial.printf("Found music file: %s\n", filename.c_str());
@@ -249,17 +250,25 @@ bool FileManager::isValidFilename(const String& filename) {
     // Başındaki / karakterini kontrol et ve atla
     int startIndex = filename.startsWith("/") ? 1 : 0;
     
-    // Sadece alfanumerik karakterler, nokta, tire, alt çizgi ve boşluğa izin ver
+    // Dosya adında izin verilen karakterler
+    const char* allowedChars = " ._-()[]{}";
+    
+    // Karakterleri kontrol et
     for (size_t i = startIndex; i < filename.length(); i++) {
         char c = filename.charAt(i);
-        if (!isalnum(c) && c != '.' && c != '-' && c != '_' && c != ' ') {
+        if (!isalnum(c) && !strchr(allowedChars, c)) {
             Serial.printf("Invalid character in filename: '%c' (0x%02x)\n", c, c);
             return false;
         }
     }
     
-    // MP3 uzantısını kontrol et
-    if (!filename.endsWith(".mp3") && !filename.endsWith(".MP3")) {
+    // Desteklenen uzantıları kontrol et
+    String lowerCase = filename;
+    lowerCase.toLowerCase();
+    if (!lowerCase.endsWith(".mp3") && 
+        !lowerCase.endsWith(".m4a") && 
+        !lowerCase.endsWith(".aac") && 
+        !lowerCase.endsWith(".wav")) {
         Serial.println("Invalid file extension");
         return false;
     }

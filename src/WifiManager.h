@@ -2,9 +2,10 @@
 #define WIFI_MANAGER_H
 
 #include <Arduino.h>
-#include <ESPAsyncWebServer.h>
+#include <WiFi.h>
 #include <DNSServer.h>
 #include <Preferences.h>
+#include <ESPAsyncWebServer.h>
 #include "config.h"
 
 class WifiManager {
@@ -12,15 +13,16 @@ private:
     AsyncWebServer& server;
     DNSServer dnsServer;
     Preferences preferences;
-    bool isConnected;
+    
     String ssid;
     String password;
+    bool isConnected;
     
     void setupAP();
     void setupWebServer();
-    bool connectToWiFi();
-    void saveCredentials(const String& ssid, const String& password);
     bool loadCredentials();
+    void saveCredentials(const String& newSSID, const String& newPass);
+    bool connectToWiFi();
 
 public:
     WifiManager(AsyncWebServer& webServer) : 
@@ -29,10 +31,10 @@ public:
     
     bool begin();
     void loop();
+    void resetSettings();
     bool isWiFiConnected() const { return isConnected; }
     String getIP() const;
     int getRSSI() const;
-    void resetSettings();
 };
 
 #endif // WIFI_MANAGER_H 

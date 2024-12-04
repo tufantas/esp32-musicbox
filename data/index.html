@@ -4,38 +4,65 @@
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1'>
     <link rel='shortcut icon' href='#'>
-    <link rel='stylesheet' href='https://use.fontawesome.com/releases/v5.15.4/css/all.min.css'>
+    <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css'>
     <link rel='stylesheet' href='css/style.css'>
-    <title>ESP32 Music Box</title>
+    <title>ESP32 Müzik Kutusu</title>
+    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
 </head>
 <body>
     <div class='container'>
-        <h1>ESP32 Music Box</h1>
+        <h1>ESP32 Müzik Kutusu</h1>
+        
+        <div class='progress-container'>
+            <span id='trackCurrentTime'>0:00</span>
+            <div class='track-progress'>
+                <div id='trackProgressBar' class='progress-bar-track'></div>
+            </div>
+            <span id='trackDuration'>0:00</span>
+        </div>
         
         <div class='player-controls'>
-            <button onclick='sendCommand("prev")'><i class='fas fa-step-backward'>⏮</i></button>
-            <button onclick='sendCommand("play")'><i class='fas fa-play'>▶</i></button>
-            <button onclick='sendCommand("pause")'><i class='fas fa-pause'>⏸</i></button>
-            <button onclick='sendCommand("stop")'><i class='fas fa-stop'>⏹</i></button>
-            <button onclick='sendCommand("next")'><i class='fas fa-step-forward'>⏭</i></button>
+            <button onclick='sendCommand("prev")' class='control-btn' title='Önceki'><i class='fas fa-backward-step'></i></button>
+            <button onclick='togglePlayStop()' id='playStopBtn' class='control-btn play-btn' title='Çal/Durdur'>
+                <i class='fas fa-play'></i>
+            </button>
+            <button onclick='sendCommand("next")' class='control-btn' title='Sonraki'><i class='fas fa-forward-step'></i></button>
         </div>
         
         <div class='volume-control'>
-            <input type='range' id='volume' min='0' max='100' value='50'>
+            <i class='fas fa-volume-down'></i>
+            <input type='range' id='volume' min='0' max='100' value='50' title='Ses Seviyesi'>
+            <i class='fas fa-volume-up'></i>
             <span id='volumeValue'>50%</span>
         </div>
         
         <div class='status'>
-            <p>Now Playing: <span id='currentTrack'>-</span></p>
-            <p>Temperature: <span id='temperature'>-</span>°C</p>
-            <p>WiFi: <span id='wifiStatus'>-</span></p>
+            <p>Çalan Parça: <span id='currentTrack'>-</span></p>
+            <p>Sıcaklık: <span id='temperature'>-</span>°C</p>
+            <p>WiFi Durumu: <span id='wifiStatus'>-</span></p>
+            <p>Saat: <span id='currentTime'>-</span></p>
+            <p>Tarih: <span id='currentDate'>-</span></p>
+        </div>
+
+        <div class='playlist'>
+            <h2>Müzik Dosyaları</h2>
+            <ul id='musicList'>
+                <!-- JavaScript ile doldurulacak -->
+            </ul>
         </div>
 
         <div class='upload-section'>
-            <h2>Upload Music</h2>
+            <h2>Müzik Yükle</h2>
+            <div class='format-info'>
+                <span class='format-tag mp3'><i class="fas fa-music"></i> MP3</span>
+                <span class='format-tag m4a'><i class="fas fa-music"></i> M4A</span>
+            </div>
             <form id='uploadForm' enctype='multipart/form-data'>
-                <input type='file' id='fileInput' name='file' accept='.mp3' multiple>
-                <button type='submit' class='upload-btn'>Upload</button>
+                <input type='file' id='fileInput' name='file' 
+                       accept='.mp3,.m4a' 
+                       title='MP3 veya M4A dosyası seçin'
+                       multiple>
+                <button type='submit' class='upload-btn'>Yükle</button>
             </form>
             <div id='uploadProgress' style='display: none;'>
                 <div class='progress-bar'>
@@ -45,11 +72,24 @@
             </div>
         </div>
 
-        <div class='playlist'>
-            <h2>Music Files</h2>
-            <ul id='musicList'>
-                <!-- JavaScript ile doldurulacak -->
-            </ul>
+        <!-- Kayıt bölümü -->
+        <div class='record-section'>
+            <h2>Ses Kaydı</h2>
+            <div class='record-info'>
+                <p><i class="fas fa-info-circle"></i> Safari kullanıcıları için:</p>
+                <ol>
+                    <li>Ayarlar > Safari > Mikrofon iznini açın</li>
+                    <li>Safari'yi tamamen kapatıp yeniden açın</li>
+                    <li>Web sitesine tekrar girin ve kayıt düğmesine basın</li>
+                </ol>
+            </div>
+            <div class='record-controls'>
+                <button id='recordButton' class='record-btn'>
+                    <i class="fas fa-microphone"></i> Kayıt
+                </button>
+                <div id='recordStatus'>Hazır</div>
+                <div id='recordTime'>00:00</div>
+            </div>
         </div>
     </div>
     <script src='js/app.js'></script>
