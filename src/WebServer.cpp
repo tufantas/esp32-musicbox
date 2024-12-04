@@ -351,6 +351,17 @@ void WebServer::setupRoutes() {
             }
         }
     });
+    
+    // Loop endpoint'i
+    server.on("/api/loop", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        if (request->hasParam("enabled", true)) {
+            bool enabled = request->getParam("enabled", true)->value() == "true";
+            audioManager.setLooping(enabled);
+            request->send(200);
+        } else {
+            request->send(400, "text/plain", "Missing enabled parameter");
+        }
+    });
 }
 
 void WebServer::handleFileUpload(AsyncWebServerRequest *request, String filename, 

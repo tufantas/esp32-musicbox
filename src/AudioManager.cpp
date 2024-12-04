@@ -20,6 +20,7 @@ AudioManager::AudioManager(FileManager& fm) :
     fileManager(fm),
     currentVolume(DEFAULT_VOLUME),
     isPlaying(false),
+    isLooping(false),
     currentTrack(""),
     audioTaskHandle(NULL),
     file(NULL),
@@ -204,6 +205,14 @@ void AudioManager::processAudio() {
         if (mp3 && mp3->isRunning()) {
             if (!mp3->loop()) {
                 Serial.println("MP3 playback ended");
+                if (isLooping) {
+                    // Aynı şarkıyı tekrar başlat
+                    Serial.println("Restarting track (loop mode)");
+                    stopPlaying();
+                    delay(100);
+                    play(currentTrack);
+                    return;
+                }
                 break;
             }
             
@@ -448,4 +457,9 @@ void AudioManager::audioTask(void* parameter) {
         }
         vTaskDelay(1);
     }
+}
+
+void AudioManager::setLooping(bool enabled) {
+    isLooping = enabled;
+    Serial.printf("Loop mode: %s\n", enabled ? "ON" : "OFF");
 }

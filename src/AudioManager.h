@@ -44,7 +44,8 @@ private:
     uint32_t trackDuration;    // Şarkının toplam süresi (saniye)
     uint32_t currentPosition;  // Şu anki pozisyon (saniye)
     uint32_t lastPositionUpdate;  // Son pozisyon güncellemesi zamanı
-
+    bool isLooping;  // Loop durumu
+    
 public:
     AudioManager(FileManager& fm);
     
@@ -94,6 +95,9 @@ public:
     uint32_t getCurrentPosition() const { return currentPosition; }
     uint32_t getTrackDuration() const { return trackDuration; }
     void updatePosition();  // Pozisyonu güncelle
+    
+    void setLooping(bool enabled);
+    bool isLoopEnabled() const { return isLooping; }
 };
 
 #endif // AUDIO_MANAGER_H 

@@ -218,6 +218,33 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    // Loop durumu
+    let isLooping = false;
+
+    // Loop toggle fonksiyonu
+    window.toggleLoop = function() {
+        const loopBtn = document.getElementById('loopBtn');
+        isLooping = !isLooping;
+        
+        fetch('/api/loop', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: 'enabled=' + isLooping
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Loop toggle failed');
+            loopBtn.classList.toggle('active', isLooping);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            // Hata durumunda geri al
+            isLooping = !isLooping;
+            loopBtn.classList.toggle('active', isLooping);
+        });
+    };
+
     // İlk durum güncellemesi ve periyodik güncelleme
     function updateStatus() {
         fetch(getBaseUrl() + '/api/status')
@@ -270,6 +297,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     isPlaying = false;
                     icon.className = 'fas fa-play';
+                }
+                // Loop durumunu güncelle
+                const loopBtn = document.getElementById('loopBtn');
+                if (data.looping) {
+                    isLooping = true;
+                    loopBtn.classList.add('active');
+                } else {
+                    isLooping = false;
+                    loopBtn.classList.remove('active');
                 }
             })
             .catch(error => {

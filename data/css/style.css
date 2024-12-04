@@ -46,6 +46,11 @@ h1 {
     transform: scale(1.1);
 }
 
+.control-btn.active {
+    background: #45a049;
+    transform: scale(1.1);
+}
+
 .play-btn {
     width: 45px;
     height: 45px;
@@ -354,4 +359,9 @@ h1 {
 
 .delete-btn:hover {
     opacity: 1;
-} 
+}
+
+#loopBtn.active i {
+    color: #4CAF50;
+}
+ 
