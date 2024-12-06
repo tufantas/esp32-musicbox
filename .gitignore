@@ -1,0 +1,7 @@
+.DS_Store
+.git.backup/
+.pio/
+.vscode/
+__pycache__/
+*.pyc
+platformio.ini.backup
