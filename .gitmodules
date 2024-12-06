@@ -1,0 +1,6 @@
+[submodule "lib/arduino-audio-tools"]
+	path = lib/arduino-audio-tools
+	url = https://github.com/pschatzmann/arduino-audio-tools.git
+[submodule "lib/arduino-libhelix"]
+	path = lib/arduino-libhelix
+	url = https://github.com/pschatzmann/arduino-libhelix.git
