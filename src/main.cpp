@@ -3,6 +3,7 @@
 #include <SPI.h>
 #include <SD.h>
 #include <RTClib.h>
+#include <WiFi.h>
 #include "config.h"
 #include "AudioManager.h"
 #include "FileManager.h"
@@ -11,6 +12,9 @@
 #include "MQTTManager.h"
 #include "WebServer.h"
 #include "BluetoothManager.h"
+#include <soc/rtc_cntl_reg.h>  // RTC kontrol register'ları için
+#include <driver/adc.h>        // ADC fonksiyonları için
+#include <esp_pm.h>            // Power management için
 
 // Dosyanın başına, include'lardan sonra ekleyin
 void printDirectory(File dir, int numTabs);  // Fonksiyon prototipi
@@ -60,7 +64,32 @@ bool initI2CDevices() {
     return true;
 }
 
+void setupPowerManagement() {
+    // CPU frekansını ayarla
+    setCpuFrequencyMhz(CPU_FREQ_NORMAL);
+    
+    // Brownout detector'ı devre dışı bırak
+    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+    
+    // ADC güç yönetimi
+    adc1_config_width(ADC_WIDTH_BIT_12);
+    
+    // Power management konfigürasyonu
+    esp_pm_config_esp32_t pm_config = {
+        .max_freq_mhz = CPU_FREQ_NORMAL,
+        .min_freq_mhz = CPU_FREQ_LOW,
+        .light_sleep_enable = false
+    };
+    esp_pm_configure(&pm_config);
+    
+    // WiFi güç tasarrufu
+    WiFi.setSleep(false);  // WiFi sleep modunu devre dışı bırak
+}
+
 void setup() {
+    // Power management ayarlarını uygula
+    setupPowerManagement();
+    
     // Seri port başlatma
     Serial.begin(115200);
     delay(1000);  // Seri port stabilizasyonu için bekle
@@ -76,13 +105,25 @@ void setup() {
     // Başlangıç durumu - Mavi yanıp sönme
     setStatusLED(0, 0, 255);
     
-    // WiFi Manager'ı ilk başlat
+    // WiFi ayarları
+    WiFi.setSleep(false);  // WiFi sleep modu kapalı
+    WiFi.setTxPower(WIFI_POWER_19_5dBm);  // Maksimum sinyal gücü
+    
+    // WiFi Manager'ı başlat
     Serial.println("\n=== Initializing WiFi ===");
-    if (!wifiManager.begin()) {
-        Serial.println("❌ WiFi initialization failed!");
-        setStatusLED(255, 0, 0);  // Kırmızı LED
-        return;  // WiFi olmadan devam etme
+    int retryCount = 0;
+    while (!wifiManager.begin() && retryCount < WIFI_MAX_RETRY) {
+        Serial.printf("WiFi retry %d/%d\n", retryCount + 1, WIFI_MAX_RETRY);
+        retryCount++;
+        delay(WIFI_CONNECT_DELAY);
     }
+
+    if (retryCount >= WIFI_MAX_RETRY) {
+        Serial.println("❌ WiFi initialization failed!");
+        setStatusLED(255, 165, 0);  // Turuncu LED
+        // WiFi olmadan devam et
+    }
+    
     Serial.println("✅ WiFi Manager initialized");
     
     // WiFi bağlantısını bekle
@@ -233,6 +274,53 @@ void setup() {
 }
 
 void loop() {
+    static uint32_t lastWifiCheck = 0;
+    static uint32_t lastPowerCheck = 0;
+    
+    // WiFi bağlantı kontrolü
+    if (millis() - lastWifiCheck >= WIFI_CONNECT_DELAY) {
+        lastWifiCheck = millis();
+        
+        if (!wifiManager.isWiFiConnected()) {
+            static uint8_t disconnectCount = 0;
+            disconnectCount++;
+            
+            if (disconnectCount >= 5) {  // 5 kez bağlantı koptu
+                disconnectCount = 0;
+                WiFi.disconnect();
+                delay(1000);
+                WiFi.begin();  // Yeniden bağlan
+            }
+        }
+    }
+    
+    // Her 5 saniyede bir güç durumunu kontrol et
+    if (millis() - lastPowerCheck >= POWER_CHECK_INTERVAL) {
+        lastPowerCheck = millis();
+        
+        // Voltaj kontrolü (opsiyonel)
+        #ifdef VOLTAGE_CHECK_PIN
+        int voltage = analogRead(VOLTAGE_CHECK_PIN);
+        if (voltage < VOLTAGE_THRESHOLD) {
+            // Düşük güç modu
+            setCpuFrequencyMhz(CPU_FREQ_LOW);
+            WiFi.setTxPower(WIFI_POWER_11dBm); // WiFi gücünü düşür
+        } else {
+            // Normal mod
+            setCpuFrequencyMhz(CPU_FREQ_NORMAL);
+            WiFi.setTxPower(WIFI_POWER_19_5dBm);
+        }
+        #endif
+        
+        // Bellek durumunu kontrol et
+        uint32_t freeHeap = ESP.getFreeHeap();
+        if (freeHeap < MINIMUM_FREE_HEAP) {
+            // Bellek temizliği
+            ESP.getFreeHeap();
+            delay(100);
+        }
+    }
+    
     // Her yönetici için loop çağrısı
     wifiManager.loop();
     webServer.loop();

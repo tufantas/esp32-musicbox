@@ -40,8 +40,11 @@
 
 // WiFi Settings
 #define WIFI_AP_SSID "ESP32_MusicBox_Setup"
-#define WIFI_CONNECT_TIMEOUT 30000    // 30 saniye
-#define WIFI_CONNECT_DELAY 500        // 500ms
+#define WIFI_CONNECT_TIMEOUT 60000    // 60 saniye
+#define WIFI_CONNECT_DELAY 1000       // 1 saniye
+#define WIFI_MAX_RETRY 5              // Maksimum yeniden deneme
+#define WIFI_POWER_SAVE false         // Güç tasarrufu kapalı
+#define WIFI_TX_POWER WIFI_POWER_19_5dBm  // WiFi sinyal gücü maksimum
 
 // Web Server
 #define WEB_SERVER_PORT 80
@@ -58,14 +61,18 @@
 #define RECONNECT_DELAY 10000
 
 // Debug Settings
-#ifdef DEBUG_MODE
-    #define DEBUG_PRINT(x) Serial.print(x)
-    #define DEBUG_PRINTLN(x) Serial.println(x)
-    #define DEBUG_STATUS(x) Serial.println(x)
+#define ENABLE_SERIAL_DEBUG false  // Seri port debug mesajlarını aç/kapa
+
+#if ENABLE_SERIAL_DEBUG
+    #define DEBUG_BEGIN(x)     Serial.begin(x)
+    #define DEBUG_PRINT(x)     Serial.print(x)
+    #define DEBUG_PRINTLN(x)   Serial.println(x)
+    #define DEBUG_PRINTF(x...) Serial.printf(x)
 #else
+    #define DEBUG_BEGIN(x)
     #define DEBUG_PRINT(x)
     #define DEBUG_PRINTLN(x)
-    #define DEBUG_STATUS(x) Serial.println(x)
+    #define DEBUG_PRINTF(x...)
 #endif
 
 // Error Codes
@@ -106,11 +113,27 @@ struct SystemStatus {
 
 // Audio Buffer Settings
 #define AUDIO_BUFFER_SIZE 8192
-#define AUDIO_TASK_PRIORITY 3
+#define AUDIO_BASE_PRIORITY 3  // Temel öncelik
+
+// Task Priorities (Audio base priority üzerine eklenir)
+#define WIFI_TASK_PRIORITY (AUDIO_BASE_PRIORITY + 2)    // 5
+#define AUDIO_TASK_PRIORITY (AUDIO_BASE_PRIORITY + 1)   // 4
+#define WEB_TASK_PRIORITY AUDIO_BASE_PRIORITY           // 3
+#define MQTT_TASK_PRIORITY (AUDIO_BASE_PRIORITY - 1)    // 2
 
 // I2S Configuration
 #define I2S_PORT I2S_NUM_0
 #define I2S_DMA_BUFFER_COUNT 8
 #define I2S_DMA_BUFFER_LEN 1024
+
+// Power Management Settings
+#define POWER_CHECK_INTERVAL 5000     // Güç kontrolü aralığı
+#define VOLTAGE_THRESHOLD 3.0         // Minimum voltaj eşiği
+#define CPU_FREQ_NORMAL 240     // Normal çalışma frekansı (MHz)
+#define CPU_FREQ_LOW 160        // Düşük güç modu frekansı (MHz)
+#define VOLTAGE_CHECK_PIN 34    // ADC pin for voltage monitoring (optional)
+#define BROWNOUT_THRESHOLD 7    // Brownout detector threshold (0-15)
+#define MINIMUM_FREE_HEAP 40000 // Minimum serbest bellek (bytes)
+#define HEAP_CHECK_INTERVAL 5000 // Bellek kontrol aralığı (ms)
 
 #endif // CONFIG_H 
