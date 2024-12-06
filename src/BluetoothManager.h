@@ -48,15 +48,31 @@ private:
 
 public:
     BluetoothManager(AudioManager& audio, TimeManager& time) : 
+<<<<<<< HEAD
         audioManager(audio), 
+=======
+        audioManager(audio),
+>>>>>>> stable-power-audio
         timeManager(time),
         deviceConnected(false),
         oldDeviceConnected(false) {}
     
+<<<<<<< HEAD
     bool begin();
     void loop();
     bool isConnected() const { return deviceConnected; }
     void updateStatus();
+=======
+    // Temel işlevler
+    bool begin();
+    void loop();
+    
+    // Status güncelleme
+    void updateStatus();
+    
+    // Durum kontrolü
+    bool isConnected() const { return deviceConnected; }
+>>>>>>> stable-power-audio
 };
 
 #endif // BLUETOOTH_MANAGER_H 
